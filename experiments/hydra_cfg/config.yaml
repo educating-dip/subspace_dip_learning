@@ -1,0 +1,13 @@
+defaults:
+  - dataset: ellipses
+  - adp_dataset: rectangles
+  - trafo: simple_trafo
+  - dip: unet
+seed: 1
+num_images: 1
+load_dip_models_from_path: null
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%dT%H:%M:%S.%fZ}
+  sweep:
+    dir: multirun/${now:%Y-%m-%dT%H:%M:%S.%fZ}
