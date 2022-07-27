@@ -1,4 +1,3 @@
-from sys import breakpointhook
 from typing import List
 import os
 from functools import reduce
@@ -36,19 +35,6 @@ def list_norm_layer_params(nn_model):
             norm_layer_params.append(name + '.weight')
             norm_layer_params.append(name + '.bias')
     return norm_layer_params
-
-
-def get_updated_func_params(nn_model, coeffs, subspace, mean):
-
-    params_vec = mean + (coeffs[None, :] * subspace).sum(dim=-1)
-    cnt = 0
-    func_params = []
-    for params in nn_model.parameters():
-        func_params.append(
-            params_vec[cnt:cnt+params.numel()].view(*params.shape)
-        )
-        cnt += params.numel()
-    return tuple(func_params)
 
 def get_params_from_nn_module(nn_model, exclude_norm_layers=True, include_bias=False):
 

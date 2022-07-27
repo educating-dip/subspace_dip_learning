@@ -1,6 +1,8 @@
 """
-Provides the Deep Image Prior (DIP).
+Provides the Subspace Deep Image Prior (DIP).
 """
-from .deep_image_prior import SubspaceDeepImagePrior
+from .base_dip_image_prior import BaseDeepImagePrior
+from .deep_image_prior import DeepImagePrior
+from .subspace_deep_image_prior import SubspaceDeepImagePrior
 from .network import UNet
-from .sample_trainer import SamplerTrainer 
+from .subspace_constructor import SubspaceConstructor

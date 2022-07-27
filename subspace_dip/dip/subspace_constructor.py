@@ -1,4 +1,7 @@
-from typing import Dict 
+"""
+Provides :class:`SubspaceConstructor`.
+"""
+from typing import Dict, Optional
 import os
 import socket
 import datetime
@@ -14,17 +17,23 @@ from subspace_dip.utils import PSNR, normalize
 from subspace_dip.data import SimulatedDataset
 from subspace_dip.utils import get_params_from_nn_module
 
-class SamplerTrainer():
+class SubspaceConstructor:
 
     """
-    Wrapper for pretraining a model.
+    Wrapper for constructing a low-dimensional subspace of the NN optimisation trajectory.
     """
+
     def __init__(self, 
-        model : nn.Module, 
-        device = None, 
-        ):
+            model : nn.Module,
+            subspace_dim : Optional['int'] = None,  
+            device = None, 
+            ):
+        
         self.model = model
-        self.device = device
+        self.device = device or torch.device(
+            ('cuda:0' if torch.cuda.is_available() else 'cpu')
+        )
+        self.subspace_dim = subspace_dim 
         self._params_traj_samples = []
     
     def _collect_params_traj_sample(self, ):
@@ -38,24 +47,41 @@ class SamplerTrainer():
         )
 
     @property
-    def subspace(self, ):
+    def subspace(self,
+            return_singular_values : bool = False, 
+            use_cpu : bool = True
+        ):
 
-        dim = len(self._params_traj_samples)
-        params_mat = torch.stack(self._params_traj_samples).T
-        subspace, S, _ = torch.svd_lowrank(params_mat, q=dim)
-        return subspace
+        subspace_dim = self.subspace_dim if self.subspace_dim is not None else len(self._params_traj_samples)
+        params_mat = torch.moveaxis(
+            torch.stack(self._params_traj_samples), (0, 1), (1, 0)
+            ) # (self.subspace_dim, num_params)
+        params_mat = params_mat if not use_cpu else params_mat.cpu()
+        bases, singular_values, _ = torch.svd_lowrank(params_mat, q=subspace_dim)
+        
+        """
+        Returns
+        -------
+        bases : Tensor Size. (num_params, subspace_dim)
+        """
+        return bases.to(device=self.device) if not return_singular_values else (
+            bases.to(device=self.device), singular_values.to(device=self.device)
+        )
 
     @property
-    def mean(self, ): 
-        return torch.stack(self._params_traj_samples).mean()
+    def mean(self, ):
+        params_mat = torch.moveaxis(
+            torch.stack(self._params_traj_samples), (0, 1), (1, 0)
+            )
+        return params_mat.mean(dim=-1) # scalar
 
-    def train(self, 
+    def sample(self, 
         dataset : SimulatedDataset, 
         optim_kwargs : Dict
         ):
 
         current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-        comment = 'pretraining'
+        comment = 'SubspaceConstructor_Pretraining'
         logdir = os.path.join(
             optim_kwargs['log_path'],
             current_time + '_' + socket.gethostname() + comment)
@@ -75,6 +101,17 @@ class SamplerTrainer():
             }
 
         dataset_sizes = {'train': len(dataset)}
+
+        num_overall_updates = ceil(
+            dataset_sizes['train'] / optim_kwargs['batch_size']
+            ) * optim_kwargs['epochs']
+        sample_idx_sequence = np.linspace(
+            optim_kwargs['burn_in'], 
+            num_overall_updates, 
+            optim_kwargs['num_samples'] + 1, 
+            dtype=int
+            )
+
         self.init_scheduler(optim_kwargs=optim_kwargs)
         if self._scheduler is not None:
             schedule_every_batch = isinstance(
@@ -83,7 +120,7 @@ class SamplerTrainer():
         self.model.to(self.device)
         self.model.train()
 
-        num_iter = 0
+        num_grad_updates = 0
         for epoch in range(optim_kwargs['epochs']):
             # Each epoch has a training and validation phase
             for phase in ['train']:
@@ -115,6 +152,10 @@ class SamplerTrainer():
                                 torch.nn.utils.clip_grad_norm_(
                                     self.model.parameters(), max_norm=1)
                                 self._optimizer.step()
+
+                                if num_grad_updates in sample_idx_sequence:
+                                    self._collect_params_traj_sample()        
+
                                 if (self._scheduler is not None and
                                         schedule_every_batch):
                                     self._scheduler.step()
@@ -133,18 +174,17 @@ class SamplerTrainer():
                                           'psnr': running_psnr/running_size})
 
                         if phase == 'train':
-                            num_iter += 1
-                            self.writer.add_scalar('loss', running_loss/running_size, num_iter)
-                            self.writer.add_scalar('psnr', running_psnr/running_size, num_iter)
-                            self.writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], num_iter)
-                            self.writer.add_image('reco', normalize(outputs[0,].detach().cpu().numpy()), num_iter)
+                            num_grad_updates += 1
+                            self.writer.add_scalar('loss', running_loss/running_size, num_grad_updates)
+                            self.writer.add_scalar('psnr', running_psnr/running_size, num_grad_updates)
+                            self.writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], num_grad_updates)
+                            self.writer.add_image('reco', normalize(outputs[0,].detach().cpu().numpy()), num_grad_updates)
 
                     if phase == 'train':
                         if (self._scheduler is not None
                                 and not schedule_every_batch):
                             self._scheduler.step()
         
-            self._collect_params_traj_sample()        
         self.writer.close()
 
     def init_optimizer(self, optim_kwargs: Dict):
