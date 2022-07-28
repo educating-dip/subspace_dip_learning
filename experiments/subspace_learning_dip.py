@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
 from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import SubspaceDeepImagePrior, SubspaceConstructor
+from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, SubspaceConstructor
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -16,11 +16,6 @@ def coordinator(cfg : DictConfig) -> None:
     ray_trafo = get_standard_ray_trafo(cfg)
     ray_trafo.to(dtype=dtype, device=device)
 
-    # data: observation, ground_truth, filtbackproj
-    dataset = get_standard_dataset(
-            cfg, ray_trafo, use_fixed_seeds_starting_from=cfg.seed,
-            device=device)
-
     net_kwargs = {
             'scales': cfg.dip.net.scales,
             'channels': cfg.dip.net.channels,
@@ -30,7 +25,7 @@ def coordinator(cfg : DictConfig) -> None:
             'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
         }
 
-    reconstructor = SubspaceDeepImagePrior(
+    base_reconstructor = DeepImagePrior(
                 ray_trafo, 
                 torch_manual_seed=cfg.dip.torch_manual_seed,
                 device=device, 
@@ -38,16 +33,17 @@ def coordinator(cfg : DictConfig) -> None:
             )
     
     subspace_constructor = SubspaceConstructor(
-        model=reconstructor.nn_model,
-        subspace_dim=300,
+        model=base_reconstructor.nn_model,
         device=device
     )
 
     optim_kwargs = {
         'log_path': './',
-        'torch_manual_seed':cfg.dip.torch_manual_seed, 
+        'seed': cfg.seed, 
+        'torch_manual_seed':cfg.dip.torch_manual_seed,
+        'save_best_learned_params_path': './',
         'epochs': 15,
-        'num_samples': 350,
+        'num_samples': 200,
         'burn_in': 100,
         'batch_size': 16,
         'weight_decay': 1e-3,
@@ -63,8 +59,27 @@ def coordinator(cfg : DictConfig) -> None:
         }
     }
 
-    subspace_constructor.sample(dataset=dataset,
+    dataset_kwargs = {
+        'im_size': cfg.dataset.im_size,
+        'length': cfg.dataset.length,
+        'white_noise_rel_stddev': cfg.dataset.noise_stddev,
+        'use_fixed_seeds_starting_from': cfg.seed, 
+    }
+
+    subspace_constructor.sample(
+        ray_trafo=ray_trafo,
+        dataset_kwargs=dataset_kwargs, 
         optim_kwargs=optim_kwargs
+    )
+
+    weights_subspace = subspace_constructor.compute_bases_span_subspace(
+        params_traj_samples=subspace_constructor.params_traj_samples,
+        subspace_dim=200, 
+        device=device
+    )
+    mean_weights = subspace_constructor.compute_traj_samples_mean(
+        params_traj_samples=subspace_constructor.params_traj_samples,
+        device=device
     )
 
     dataset = get_standard_dataset(
@@ -83,6 +98,14 @@ def coordinator(cfg : DictConfig) -> None:
         if cfg.seed is not None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
 
+        reconstructor = SubspaceDeepImagePrior(
+                ray_trafo=ray_trafo,
+                state_dict=base_reconstructor.nn_model.state_dict(),
+                torch_manual_seed=cfg.dip.torch_manual_seed,
+                device=device, 
+                net_kwargs=net_kwargs
+            )
+    
         observation, ground_truth, filtbackproj = data_sample
 
         observation = observation.to(dtype=dtype, device=device)
@@ -97,17 +120,14 @@ def coordinator(cfg : DictConfig) -> None:
                 'gamma': cfg.dip.optim.gamma}
 
         recon = reconstructor.reconstruct(
-                subspace = subspace_constructor.subspace, 
-                mean = subspace_constructor.mean, 
+                subspace = weights_subspace, 
+                mean = mean_weights, 
                 noisy_observation = observation,
                 filtbackproj=filtbackproj,
                 ground_truth=ground_truth,
                 recon_from_randn=cfg.dip.recon_from_randn,
                 log_path=cfg.dip.log_path,
                 optim_kwargs=optim_kwargs)
-
-        torch.save(reconstructor.nn_model.state_dict(),
-                './dip_model_{}.pt'.format(i))
 
         print('DIP reconstruction of sample {:d}'.format(i))
         print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))

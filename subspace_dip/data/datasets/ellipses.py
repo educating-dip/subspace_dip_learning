@@ -8,6 +8,8 @@ from torch import Tensor
 from itertools import repeat
 from odl import uniform_discr
 from odl.phantom import ellipsoid_phantom
+from ..simulation import SimulatedDataset
+from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
 
 class EllipsesDataset(torch.utils.data.IterableDataset):
     """
@@ -17,10 +19,11 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
     background value of ``0.``.
     """
     def __init__(self, 
-                shape : int = 128,
-                length : int = 3200,
-                fixed_seed : int = 1
-            ):
+            shape : int = 128,
+            length : int = 3200, 
+            fixed_seed : int = 1, 
+            fold : str = 'train'
+        ):
 
         self.shape = shape
         min_pt = [-self.shape[0]/2, -self.shape[1]/2]
@@ -28,10 +31,24 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
         self.space = uniform_discr(min_pt, max_pt, self.shape)
         self.length = length
         self.ellipses_data = []
-        fixed_seed = None if fixed_seed in [False, None] else int(fixed_seed)
-        self.rng = np.random.RandomState(fixed_seed)
+        self.setup_fold(
+            fixed_seed=fixed_seed,
+            fold=fold
+        )
         super().__init__()
-    
+
+    def setup_fold(self, 
+        fixed_seed : int = 1, 
+        fold : str = 'train'
+        ):
+
+        fixed_seed = None if fixed_seed in [False, None] else int(fixed_seed)
+        if (fixed_seed is not None) and (fold == 'validation'): 
+            fixed_seed = fixed_seed + 1 
+        self.rng = np.random.RandomState(
+            fixed_seed
+        )
+        
     def __len__(self) -> Union[int, float]:
         return self.length if self.length is not None else float('inf')
 
@@ -71,3 +88,26 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
     def __getitem__(self, idx: int) -> Tensor:
         self._extend_ellipses_data(idx + 1)
         return self._generate_item(idx)
+
+
+def get_ellipses_dataset(
+        ray_trafo: BaseRayTrafo, 
+        fold : str = 'train', 
+        im_size : int = 128, 
+        length : int = 3200, 
+        white_noise_rel_stddev : float = .05, 
+        use_fixed_seeds_starting_from : int = 1, 
+        device = None) -> SimulatedDataset:
+
+    image_dataset = EllipsesDataset(
+            (im_size, im_size), 
+            length=length,
+            fold=fold, 
+            )
+    
+    return SimulatedDataset(
+            image_dataset, ray_trafo,
+            white_noise_rel_stddev=white_noise_rel_stddev,
+            use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
+            device=device
+        )

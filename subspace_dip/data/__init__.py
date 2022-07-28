@@ -3,7 +3,7 @@ Provides data generation, data access, and the ray transform.
 """
 
 from .datasets import (
-        RectanglesDataset, EllipsesDataset)
+        RectanglesDataset, EllipsesDataset, get_ellipses_dataset)
 from .trafo import (
         BaseRayTrafo, MatmulRayTrafo,
         get_odl_ray_trafo_parallel_beam_2d, ParallelBeam2DRayTrafo,

@@ -91,7 +91,7 @@ class DeepImagePrior(BaseDeepImagePrior):
                 logdir=os.path.join(log_path, '_'.join((
                         datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                         socket.gethostname(),
-                        'DIP' if not use_tv_loss else 'DIP+TV'))))
+                        '_DIP' if not use_tv_loss else '_DIP+TV'))))
 
         optim_kwargs = optim_kwargs or {}
         optim_kwargs.setdefault('gamma', 1e-4)

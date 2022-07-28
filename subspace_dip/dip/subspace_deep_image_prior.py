@@ -23,6 +23,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
 
     def __init__(self,
             ray_trafo: BaseRayTrafo,
+            state_dict, 
             torch_manual_seed: Union[int, None] = 1,
             device=None,
             net_kwargs=None):
@@ -34,6 +35,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
             net_kwargs=net_kwargs
         )
 
+        self.nn_model.load_state_dict(
+            state_dict=state_dict
+        )
         self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
 
     def _get_func_params(self, 
@@ -134,7 +138,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                 logdir=os.path.join(log_path, '_'.join((
                         datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                         socket.gethostname(),
-                        'Subspace_DIP' if not use_tv_loss else 'Subspace_DIP+TV'))))
+                        '_Subspace_DIP' if not use_tv_loss else '_Subspace_DIP+TV'))))
 
         optim_kwargs = optim_kwargs or {}
         optim_kwargs.setdefault('gamma', 1e-4)
@@ -150,7 +154,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
             0.1 * torch.randn(1, 1, *self.ray_trafo.im_shape, device=self.device)
             if recon_from_randn else
             filtbackproj.to(self.device))
-
+    
         coeffs = nn.Parameter(
             torch.zeros(
                 subspace.shape[-1],
@@ -180,6 +184,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                
         writer.add_image('filtbackproj', normalize(
                filtbackproj[0, ...]).cpu().numpy(), 0)
+
+        writer.add_image('base_recon', normalize(
+               self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
 
         with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar,
                 miniters=optim_kwargs['iterations']//100) as pbar:
