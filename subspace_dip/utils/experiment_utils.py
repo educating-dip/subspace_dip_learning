@@ -1,13 +1,13 @@
 from torch.utils.data import Dataset
 from subspace_dip.data import get_ray_trafo, SimulatedDataset
 from subspace_dip.data import (
-        RectanglesDataset, EllipsesDataset
+        RectanglesDataset, EllipsesDataset, WalnutPatchesDataset
     )
 
 def get_standard_ray_trafo(cfg):
     kwargs = {}
     kwargs['angular_sub_sampling'] = cfg.trafo.angular_sub_sampling
-    if cfg.dataset.name in ('ellipses', 'rectangles'):
+    if cfg.dataset.name in ('ellipses', 'rectangles', 'walnut_patches'):
         kwargs['im_shape'] = (cfg.dataset.im_size, cfg.dataset.im_size)
         kwargs['num_angles'] = cfg.trafo.num_angles
     else:
@@ -53,6 +53,21 @@ def get_standard_dataset(cfg, ray_trafo, use_fixed_seeds_starting_from=1, device
                 num_rects=cfg.dataset.num_rects,
                 num_angle_modes=cfg.dataset.num_angle_modes,
                 angle_modes_sigma=cfg.dataset.angle_modes_sigma)
+        dataset = SimulatedDataset(
+                image_dataset, ray_trafo,
+                white_noise_rel_stddev=cfg.dataset.noise_stddev,
+                use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
+                device=device)
+    
+    elif name == 'walnut_patches':
+
+        image_dataset = WalnutPatchesDataset(
+            data_path=cfg.dataset.data_path_test, shape=(
+                cfg.dataset.im_size, cfg.dataset.im_size
+                ),
+            walnut_id=cfg.dataset.walnut_id, orbit_id=cfg.dataset.orbit_id, 
+            slice_ind=cfg.dataset.slice_ind, 
+            )
         dataset = SimulatedDataset(
                 image_dataset, ray_trafo,
                 white_noise_rel_stddev=cfg.dataset.noise_stddev,

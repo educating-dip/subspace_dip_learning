@@ -32,21 +32,25 @@ def coordinator(cfg : DictConfig) -> None:
                 net_kwargs=net_kwargs
             )
     
+    if cfg.load_dip_models_from_path is not None: 
+        base_reconstructor.load_pretrain_model(
+            learned_params_path=cfg.load_dip_models_from_path)
+            
+    
     subspace_constructor = SubspaceConstructor(
-        model=base_reconstructor.nn_model,
-        device=device
-    )
+            model=base_reconstructor.nn_model,
+            device=device
+        )
 
     optim_kwargs = {
         'log_path': './',
         'seed': cfg.seed, 
         'torch_manual_seed':cfg.dip.torch_manual_seed,
         'save_best_learned_params_path': './',
-        'epochs': 15,
-        'num_samples': 200,
+        'epochs': 5,
+        'num_samples': 210,
         'burn_in': 100,
         'batch_size': 16,
-        'weight_decay': 1e-3,
         'optimizer': {
             'lr': 1e-3,
             'weight_decay': 1e-8,
@@ -66,18 +70,24 @@ def coordinator(cfg : DictConfig) -> None:
         'use_fixed_seeds_starting_from': cfg.seed, 
     }
 
-    subspace_constructor.sample(
-        ray_trafo=ray_trafo,
-        dataset_kwargs=dataset_kwargs, 
-        optim_kwargs=optim_kwargs
-    )
+    if cfg.path_to_params_traj_samples is not None:
+        subspace_constructor.load_params_traj_samples(
+            path_to_params_traj_samples=cfg.path_to_params_traj_samples
+        )
+    else:
+        subspace_constructor.sample(
+            ray_trafo=ray_trafo,
+            dataset_kwargs=dataset_kwargs, 
+            optim_kwargs=optim_kwargs
+        )
 
-    weights_subspace = subspace_constructor.compute_bases_span_subspace(
+    bases_spanning_subspace = subspace_constructor.compute_bases_span_subspace(
         params_traj_samples=subspace_constructor.params_traj_samples,
-        subspace_dim=200, 
+        subspace_dim=50,
         device=device
     )
-    mean_weights = subspace_constructor.compute_traj_samples_mean(
+
+    mean_params_bias = subspace_constructor.compute_traj_samples_mean(
         params_traj_samples=subspace_constructor.params_traj_samples,
         device=device
     )
@@ -100,6 +110,8 @@ def coordinator(cfg : DictConfig) -> None:
 
         reconstructor = SubspaceDeepImagePrior(
                 ray_trafo=ray_trafo,
+                bases_spanning_subspace=bases_spanning_subspace,
+                mean_params_bias=mean_params_bias,
                 state_dict=base_reconstructor.nn_model.state_dict(),
                 torch_manual_seed=cfg.dip.torch_manual_seed,
                 device=device, 
@@ -120,8 +132,6 @@ def coordinator(cfg : DictConfig) -> None:
                 'gamma': cfg.dip.optim.gamma}
 
         recon = reconstructor.reconstruct(
-                subspace = weights_subspace, 
-                mean = mean_weights, 
                 noisy_observation = observation,
                 filtbackproj=filtbackproj,
                 ground_truth=ground_truth,
@@ -129,7 +139,7 @@ def coordinator(cfg : DictConfig) -> None:
                 log_path=cfg.dip.log_path,
                 optim_kwargs=optim_kwargs)
 
-        print('DIP reconstruction of sample {:d}'.format(i))
+        print('Subspace DIP reconstruction of sample {:d}'.format(i))
         print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 

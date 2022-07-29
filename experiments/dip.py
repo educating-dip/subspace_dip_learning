@@ -32,6 +32,10 @@ def coordinator(cfg : DictConfig) -> None:
                 device=device, 
                 net_kwargs=net_kwargs
             )
+    if cfg.load_dip_models_from_path is not None: 
+        reconstructor.load_pretrain_model(
+            learned_params_path=cfg.load_dip_models_from_path)
+            
 
     dataset = get_standard_dataset(
             cfg, 

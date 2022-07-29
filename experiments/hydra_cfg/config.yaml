@@ -6,6 +6,7 @@ defaults:
 seed: 1
 num_images: 1
 load_dip_models_from_path: null
+path_to_params_traj_samples: null
 hydra:
   run:
     dir: outputs/${now:%Y-%m-%dT%H:%M:%S.%fZ}

@@ -1,7 +1,7 @@
 """
 Provides :class:`SubspaceDeepImagePrior`.
 """
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 import os
 import socket
 import datetime
@@ -12,54 +12,58 @@ import torch.nn as nn
 import numpy as np
 import functorch as ftch
 import tensorboardX
+from torch.nn import Module
 from torch import Tensor
 from torch.nn import MSELoss
 from tqdm import tqdm
-from subspace_dip.utils import tv_loss, PSNR, normalize
+from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
 from subspace_dip.data import BaseRayTrafo
 from .base_dip_image_prior import BaseDeepImagePrior
 
-class SubspaceDeepImagePrior(BaseDeepImagePrior):
+class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
 
     def __init__(self,
             ray_trafo: BaseRayTrafo,
-            state_dict, 
+            bases_spanning_subspace: Tensor,
+            mean_params_bias: Tensor,
+            state_dict: Optional[None] = None, 
             torch_manual_seed: Union[int, None] = 1,
             device=None,
             net_kwargs=None):
 
-        super().__init__(
+        Module.__init__(self, )
+        BaseDeepImagePrior.__init__(self, 
             ray_trafo=ray_trafo,
             torch_manual_seed=torch_manual_seed,
             device=device,
             net_kwargs=net_kwargs
         )
 
-        self.nn_model.load_state_dict(
-            state_dict=state_dict
-        )
+        if state_dict is not None: 
+            self.nn_model.load_state_dict(
+                state_dict=state_dict
+            )
         self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
+        self.bases_spanning_subspace=bases_spanning_subspace
+        self.mean_params_bias=mean_params_bias
+        self.setup()
+    
+    def setup(self, ) -> None: 
+        self.linear_coeffs = nn.Parameter(
+            torch.zeros(
+                self.bases_spanning_subspace.shape[-1],
+                requires_grad=True,
+                device=self.device
+                )
+            )
 
     def _get_func_params(self, 
-            linear_coeffs : Tensor,
-            subspace : Tensor, 
-            mean: Tensor
-        ):
+        ) -> Tuple[Tensor]:
 
-        """
-        Parameters
-        ----------
+        assert self.linear_coeffs[None, :].shape[-1] == self.bases_spanning_subspace.shape[-1]
 
-        linear_coeffs : Tensor
-            Parameters vector (`requires_grad=True`). Size. (subspace_dim)
-        subspace : Tensor
-            Bases defying subspace. Size. (num_params, subspace_dim)
-        mean : Tensor
-            NN parameters mean. Scalar. 
-        """
-        assert linear_coeffs[None, :].shape[-1] == subspace.shape[-1]
-
-        weights = mean + (linear_coeffs[None, :] * subspace).sum(dim=-1) # sum over subspace_dim
+        weights = self.mean_params_bias + (
+            self.linear_coeffs[None, :] * self.bases_spanning_subspace).sum(dim=-1) # sum over subspace_dim
         cnt = 0
         func_weights = []
         for params in self.nn_model.parameters():
@@ -73,9 +77,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         for params in self.nn_model.parameters():
             params.requires_grad_(set_require_grad)
 
+    def forward(self, ) -> Tensor:
+
+        return self.func_model_with_input(self._get_func_params(), self.net_input)
+
     def reconstruct(self,
-            subspace: Tensor, 
-            mean: Tensor, 
             noisy_observation: Tensor,
             filtbackproj: Optional[Tensor] = None,
             ground_truth: Optional[Tensor] = None,
@@ -154,17 +160,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
             0.1 * torch.randn(1, 1, *self.ray_trafo.im_shape, device=self.device)
             if recon_from_randn else
             filtbackproj.to(self.device))
-    
-        coeffs = nn.Parameter(
-            torch.zeros(
-                subspace.shape[-1],
-                requires_grad=True,
-                device=self.device
-                )
-            )
-        
+            
         self.optimizer = torch.optim.Adam(
-            [coeffs],
+            [self.linear_coeffs],
             lr=optim_kwargs['lr'],
             weight_decay=optim_kwargs['weight_decay']
         )
@@ -179,22 +177,30 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         min_loss_state = {
             'loss': np.inf,
             'output': self.nn_model(self.net_input).detach(),  # pylint: disable=not-callable
-            'params_state_dict': deepcopy(coeffs),
+            'params_state_dict': deepcopy(self.linear_coeffs),
         }
-               
-        writer.add_image('filtbackproj', normalize(
-               filtbackproj[0, ...]).cpu().numpy(), 0)
+
+        if ground_truth is not None:
+            writer.add_image('ground_truth', normalize(
+               ground_truth[0, ...]).cpu().numpy(), 0)
+
+        if filtbackproj is not None: 
+            writer.add_image('filtbackproj', normalize(
+                filtbackproj[0, ...]).cpu().numpy(), 0)
 
         writer.add_image('base_recon', normalize(
                self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
+        
+        print('DIP reconstruction of sample')
+        print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
+        print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 
         with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar,
                 miniters=optim_kwargs['iterations']//100) as pbar:
 
             for i in pbar:
                 self.optimizer.zero_grad()
-                func_params = self._get_func_params(coeffs, subspace, mean)
-                output = self.func_model_with_input(func_params, self.net_input)
+                output = self.forward() 
                 loss = criterion(self.ray_trafo(output), noisy_observation)
                 if use_tv_loss:
                     loss = loss + optim_kwargs['gamma'] * tv_loss(output)
@@ -204,7 +210,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                 if loss.item() < min_loss_state['loss']:
                     min_loss_state['loss'] = loss.item()
                     min_loss_state['output'] = output.detach()
-                    min_loss_state['params_state_dict'] = deepcopy(coeffs)
+                    min_loss_state['params_state_dict'] = deepcopy(self.linear_coeffs)
 
                 self.optimizer.step()
 
@@ -225,7 +231,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                     writer.add_image('reco', normalize(
                             min_loss_state['output'][0, ...]).cpu().numpy(), i)
 
-        self.nn_model.load_state_dict(min_loss_state['params_state_dict'])
+        self.linear_coeffs = min_loss_state['params_state_dict']
         writer.close()
 
         return min_loss_state['output']

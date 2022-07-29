@@ -1,7 +1,7 @@
 """
 Provides the EllipsesDataset.
 """
-from typing import Union, Iterator
+from typing import Union, Iterator, Tuple 
 import numpy as np
 import torch 
 from torch import Tensor
@@ -19,7 +19,7 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
     background value of ``0.``.
     """
     def __init__(self, 
-            shape : int = 128,
+            shape : Tuple[int, int] = (128,128), 
             length : int = 3200, 
             fixed_seed : int = 1, 
             fold : str = 'train'
