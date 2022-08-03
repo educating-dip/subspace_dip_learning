@@ -1,0 +1,17 @@
+low_rank_subspace_dim: 200
+num_random_projs: null
+training: 
+  num_epochs: 20
+  batch_size: 16
+  optim:
+    lr: 1e-3
+    weight_decay: 1e-6
+    lr_min: 5e-5,
+    max_lr: 5e-3 
+sampling:
+  num_samples: 500
+  burn_in: 1000
+optim:
+  lr: 1e-2
+  weight_decay: 1e-6 
+  iterations: 10000

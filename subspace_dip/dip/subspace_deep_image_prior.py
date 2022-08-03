@@ -62,8 +62,9 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
 
         assert self.linear_coeffs[None, :].shape[-1] == self.bases_spanning_subspace.shape[-1]
 
-        weights = self.mean_params_bias + (
-            self.linear_coeffs[None, :] * self.bases_spanning_subspace).sum(dim=-1) # sum over subspace_dim
+        weights = self.mean_params_bias + torch.inner(
+            self.linear_coeffs, self.bases_spanning_subspace
+            ) 
         cnt = 0
         func_weights = []
         for params in self.nn_model.parameters():
@@ -77,9 +78,9 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         for params in self.nn_model.parameters():
             params.requires_grad_(set_require_grad)
 
-    def forward(self, ) -> Tensor:
-
-        return self.func_model_with_input(self._get_func_params(), self.net_input)
+    def forward(self) -> Tensor:
+        return self.func_model_with_input(
+            self._get_func_params(), self.net_input)
 
     def reconstruct(self,
             noisy_observation: Tensor,

@@ -8,6 +8,8 @@ import datetime
 import torch
 import numpy as np
 import tensorboardX
+import tensorly as tl 
+tl.set_backend('pytorch')
 import torch.nn as nn
 from torch import Tensor
 from copy import deepcopy
@@ -73,15 +75,29 @@ class SubspaceConstructor:
         self.params_traj_samples.extend(
             torch.load(path, map_location=device)
         )
-
+    
     @classmethod
-    def compute_bases_span_subspace(cls,
+    def compute_bases_subspace(cls,
             params_traj_samples : List[Tensor], 
-            subspace_dim : Optional['int'] = None,
+            subspace_dim : Optional[int] = None,
+            num_rand_projs: Optional[int] = None,
             return_singular_values : bool = False,
             device = None, 
             use_cpu : bool = True
         ) -> Tensor:
+
+        def _add_random_projs(
+                bases: Tensor,
+                num_rand_projs: int
+                ) -> Tensor:
+            
+            randn_projs = torch.randn( (bases.shape[0], num_rand_projs), 
+                device=bases.device
+            )
+            randn_projs_norm = torch.norm(randn_projs, 2, dim=0, keepdim=True)
+            randn_projs_scaled = randn_projs.div(randn_projs_norm)
+
+            return torch.cat((bases, randn_projs_scaled), dim=-1)
 
         assert params_traj_samples
         subspace_dim = subspace_dim if subspace_dim is not None else len(params_traj_samples)
@@ -89,12 +105,18 @@ class SubspaceConstructor:
             torch.stack(params_traj_samples), (0, 1), (1, 0)
             ) # (num_params, subspace_dim)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
-        bases, singular_values, _ = torch.svd_lowrank(params_mat, q=subspace_dim)
+        bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim)
+        
+        if num_rand_projs is not None: 
+            bases = _add_random_projs(
+                bases=bases,
+                num_rand_projs=num_rand_projs
+            )
         
         """
         Returns
         -------
-        bases : Tensor Size. (num_params, subspace_dim)
+        bases : Tensor Size. (num_params, subspace_dim + num_rand_projs)
         """
         return bases.detach().to(device=device) if not return_singular_values else (
             bases.detach().to(device=device), singular_values.detach().to(device=device)

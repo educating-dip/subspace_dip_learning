@@ -45,21 +45,21 @@ def coordinator(cfg : DictConfig) -> None:
     optim_kwargs = {
         'log_path': './',
         'seed': cfg.seed, 
-        'torch_manual_seed':cfg.dip.torch_manual_seed,
+        'torch_manual_seed': cfg.dip.torch_manual_seed,
         'save_best_learned_params_path': './',
-        'epochs': 5,
-        'num_samples': 210,
-        'burn_in': 100,
-        'batch_size': 16,
+        'epochs': cfg.subspace.training.num_epochs,
+        'num_samples': cfg.subspace.sampling.num_samples,
+        'burn_in': cfg.subspace.sampling.burn_in,
+        'batch_size': cfg.subspace.training.batch_size,
         'optimizer': {
-            'lr': 1e-3,
-            'weight_decay': 1e-8,
+            'lr': cfg.subspace.training.optim.lr,
+            'weight_decay': cfg.subspace.training.optim.weight_decay,
         },
         'scheduler': {
             'name': 'cosine',
-            'train_len': 3200,
-            'lr_min': 5e-5,
-            'max_lr': 5e-3
+            'train_len': cfg.dataset.length,
+            'lr_min': cfg.subspace.training.optim.lr_min,
+            'max_lr': cfg.subspace.training.optim.max_lr
         }
     }
 
@@ -81,9 +81,10 @@ def coordinator(cfg : DictConfig) -> None:
             optim_kwargs=optim_kwargs
         )
 
-    bases_spanning_subspace = subspace_constructor.compute_bases_span_subspace(
+    bases_spanning_subspace = subspace_constructor.compute_bases_subspace(
         params_traj_samples=subspace_constructor.params_traj_samples,
-        subspace_dim=50,
+        subspace_dim=cfg.subspace.low_rank_subspace_dim,
+        num_rand_projs=cfg.subspace.num_random_projs,
         device=device
     )
 
@@ -125,19 +126,21 @@ def coordinator(cfg : DictConfig) -> None:
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         optim_kwargs = {
-                'lr': 1e-2,
-                'weight_decay': 1e-8, 
-                'iterations': 10000,
+                'lr': cfg.subspace.optim.lr,
+                'weight_decay': cfg.subspace.optim.weight_decay, 
+                'iterations': cfg.subspace.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
-                'gamma': cfg.dip.optim.gamma}
+                'gamma': cfg.dip.optim.gamma
+            }
 
         recon = reconstructor.reconstruct(
-                noisy_observation = observation,
+                noisy_observation=observation,
                 filtbackproj=filtbackproj,
                 ground_truth=ground_truth,
                 recon_from_randn=cfg.dip.recon_from_randn,
                 log_path=cfg.dip.log_path,
-                optim_kwargs=optim_kwargs)
+                optim_kwargs=optim_kwargs
+            )
 
         print('Subspace DIP reconstruction of sample {:d}'.format(i))
         print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))

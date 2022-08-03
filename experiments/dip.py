@@ -59,8 +59,8 @@ def coordinator(cfg : DictConfig) -> None:
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         optim_kwargs = {
-                'lr': 1e-3,
-                'iterations': 10000,
+                'lr': cfg.dip.optim.lr,
+                'iterations': cfg.dip.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
                 'gamma': cfg.dip.optim.gamma}
 

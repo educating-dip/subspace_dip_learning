@@ -3,6 +3,7 @@ defaults:
   - adp_dataset: rectangles
   - trafo: simple_trafo
   - dip: unet
+  - subspace: subspace
 seed: 1
 num_images: 1
 load_dip_models_from_path: null
