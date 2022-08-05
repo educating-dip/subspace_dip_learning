@@ -123,8 +123,7 @@ class DeepImagePrior(BaseDeepImagePrior):
         writer.add_image('filtbackproj', normalize(
                filtbackproj[0, ...]).cpu().numpy(), 0)
 
-        with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar,
-                miniters=optim_kwargs['iterations']//100) as pbar:
+        with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar) as pbar:
 
             for i in pbar:
                 self.optimizer.zero_grad()
