@@ -1,6 +1,6 @@
 defaults:
   - dataset: ellipses
-  - adp_dataset: rectangles
+  - adp_dataset: walnut_patches
   - trafo: simple_trafo
   - dip: unet
   - subspace: subspace
