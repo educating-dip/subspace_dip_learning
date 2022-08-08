@@ -36,7 +36,6 @@ def coordinator(cfg : DictConfig) -> None:
         base_reconstructor.load_pretrain_model(
             learned_params_path=cfg.load_dip_models_from_path)
             
-    
     subspace_constructor = SubspaceConstructor(
             model=base_reconstructor.nn_model,
             device=device
@@ -71,81 +70,11 @@ def coordinator(cfg : DictConfig) -> None:
         'use_fixed_seeds_starting_from': cfg.seed, 
     }
 
-    if cfg.path_to_params_traj_samples is not None:
-        subspace_constructor.load_params_traj_samples(
-            path_to_params_traj_samples=cfg.path_to_params_traj_samples
-        )
-    else:
-        subspace_constructor.sample(
-            ray_trafo=ray_trafo,
-            dataset_kwargs=dataset_kwargs, 
-            optim_kwargs=optim_kwargs
-        )
-
-    bases_spanning_subspace = subspace_constructor.compute_bases_subspace(
-        params_traj_samples=subspace_constructor.params_traj_samples,
-        subspace_dim=cfg.subspace.low_rank_subspace_dim,
-        num_rand_projs=cfg.subspace.num_random_projs,
-        device=device
+    subspace_constructor.sample(
+        ray_trafo=ray_trafo,
+        dataset_kwargs=dataset_kwargs, 
+        optim_kwargs=optim_kwargs
     )
-
-    mean_params_bias = subspace_constructor.compute_traj_samples_mean(
-        params_traj_samples=subspace_constructor.params_traj_samples,
-        device=device
-    )
-
-    dataset = get_standard_dataset(
-            cfg, 
-            ray_trafo, 
-            use_fixed_seeds_starting_from=cfg.seed,
-            device=device, 
-            use_adp_dataset=True
-        )
-
-    # within subspace optimization 
-    for i, data_sample in enumerate(islice(DataLoader(dataset), cfg.num_images)):
-        if i < cfg.get('skip_first_images', 0):
-            continue
-
-        if cfg.seed is not None:
-            torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
-
-        reconstructor = SubspaceDeepImagePrior(
-                ray_trafo=ray_trafo,
-                bases_spanning_subspace=bases_spanning_subspace,
-                mean_params_bias=mean_params_bias,
-                state_dict=base_reconstructor.nn_model.state_dict(),
-                torch_manual_seed=cfg.dip.torch_manual_seed,
-                device=device, 
-                net_kwargs=net_kwargs
-            )
-    
-        observation, ground_truth, filtbackproj = data_sample
-
-        observation = observation.to(dtype=dtype, device=device)
-        filtbackproj = filtbackproj.to(dtype=dtype, device=device)
-        ground_truth = ground_truth.to(dtype=dtype, device=device)
-
-        optim_kwargs = {
-                'lr': cfg.subspace.optim.lr,
-                'weight_decay': cfg.subspace.optim.weight_decay, 
-                'iterations': cfg.subspace.optim.iterations,
-                'loss_function': cfg.dip.optim.loss_function,
-                'gamma': cfg.dip.optim.gamma
-            }
-
-        recon = reconstructor.reconstruct(
-                noisy_observation=observation,
-                filtbackproj=filtbackproj,
-                ground_truth=ground_truth,
-                recon_from_randn=cfg.dip.recon_from_randn,
-                log_path=cfg.dip.log_path,
-                optim_kwargs=optim_kwargs
-            )
-
-        print('Subspace DIP reconstruction of sample {:d}'.format(i))
-        print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
-        print('SSIM:', SSIM(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 
 if __name__ == '__main__':
     coordinator()

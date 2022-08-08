@@ -98,14 +98,14 @@ class SubspaceConstructor:
             randn_projs_scaled = randn_projs.div(randn_projs_norm)
 
             return torch.cat((bases, randn_projs_scaled), dim=-1)
-
+        
         assert params_traj_samples
         subspace_dim = subspace_dim if subspace_dim is not None else len(params_traj_samples)
         params_mat = torch.moveaxis(
             torch.stack(params_traj_samples), (0, 1), (1, 0)
             ) # (num_params, subspace_dim)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
-        bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim)
+        bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim, dtype=params_mat.dtype)
         
         if num_rand_projs is not None: 
             bases = _add_random_projs(

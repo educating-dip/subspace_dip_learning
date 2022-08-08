@@ -14,7 +14,7 @@ def get_standard_ray_trafo(cfg):
         raise ValueError
     return get_ray_trafo(cfg.dataset.name, kwargs=kwargs)
 
-def get_standard_dataset(cfg, ray_trafo, use_fixed_seeds_starting_from=1, device=None, use_adp_dataset=False) -> Dataset:
+def get_standard_dataset(cfg, ray_trafo, use_fixed_seeds_starting_from=1, device=None) -> Dataset:
     """
     Returns a dataset of tuples ``noisy_observation, x, filtbackproj``, where
         * `noisy_observation` has shape ``(1,) + obs_shape``
@@ -30,10 +30,8 @@ def get_standard_dataset(cfg, ray_trafo, use_fixed_seeds_starting_from=1, device
         (including `ray_trafo.fbp`) must support tensors on the device.
     """
 
-    name = cfg.dataset.name if not use_adp_dataset else cfg.adp_dataset.name
-    if use_adp_dataset: 
-        cfg.dataset = cfg.adp_dataset
-    
+    name = cfg.dataset.name 
+
     if name == 'ellipses':
 
         image_dataset = EllipsesDataset(
