@@ -47,6 +47,7 @@ def coordinator(cfg : DictConfig) -> None:
         'seed': cfg.seed, 
         'torch_manual_seed': cfg.dip.torch_manual_seed,
         'save_best_learned_params_path': './',
+        'save_best_learned_params_per_epoch': cfg.subspace.training.save_best_learned_params_per_epoch,
         'epochs': cfg.subspace.training.num_epochs,
         'num_samples': cfg.subspace.sampling.num_samples,
         'burn_in': cfg.subspace.sampling.burn_in,

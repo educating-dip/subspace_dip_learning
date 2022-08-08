@@ -281,6 +281,12 @@ class SubspaceConstructor:
                     epoch_loss = running_loss / dataset_sizes[phase]
                     epoch_psnr = running_psnr / dataset_sizes[phase]
 
+                    if (phase == 'train' and (
+                        optim_kwargs['save_best_learned_params_path'] is not None) and optim_kwargs['save_best_learned_params_per_epoch']):
+                        self.save_learned_params(optim_kwargs['save_best_learned_params_path'], comment=f'epoch_{epoch}_')
+        
+
+
                     if phase == 'validation':
                         self.writer.add_scalar('val_loss', epoch_loss, num_grad_updates)
                         self.writer.add_scalar('val_psnr', epoch_psnr, num_grad_updates)
@@ -354,10 +360,12 @@ class SubspaceConstructor:
     def scheduler(self, value):
         self._scheduler = value
 
-    def save_learned_params(self, path):
+    def save_learned_params(self, path, comment=None):
         """
         Save learned parameters from file.
         """
+        if comment is not None: 
+            path += comment
         path = path if path.endswith('.pt') else path + 'nn_learned_params.pt'
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(self.model.state_dict(), path)
