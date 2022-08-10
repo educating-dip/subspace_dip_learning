@@ -163,7 +163,7 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         writer.add_image('base_recon', normalize(
                self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
         
-        print('PreTrained UNET reconstruction of sample')
+        print('Pre-trained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 
