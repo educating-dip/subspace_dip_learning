@@ -10,6 +10,7 @@ optim:
   iterations: 10000
   loss_function: mse
   gamma: 1e-4
+  optimizer: adam
 show_pbar: True
 torch_manual_seed: 10
 log_path: ./

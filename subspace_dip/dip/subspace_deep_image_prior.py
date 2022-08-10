@@ -25,7 +25,6 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
     def __init__(self,
             ray_trafo: BaseRayTrafo,
             bases_spanning_subspace: Tensor,
-            mean_params_bias: Tensor,
             state_dict: Optional[None] = None, 
             torch_manual_seed: Union[int, None] = 1,
             device=None,
@@ -43,28 +42,32 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
             self.nn_model.load_state_dict(
                 state_dict=state_dict
             )
+        
         self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
-        self.bases_spanning_subspace=bases_spanning_subspace
-        self.mean_params_bias=mean_params_bias
-        self.setup()
+        self.bases_spanning_subspace = bases_spanning_subspace
+        self.pretrained_weights = torch.cat(
+            [param.flatten().detach() for param in self.nn_model.parameters()]
+        )
+        self._setup()
     
-    def setup(self, ) -> None: 
+    def _setup(self, ) -> None:
+
         self.linear_coeffs = nn.Parameter(
             torch.zeros(
                 self.bases_spanning_subspace.shape[-1],
                 requires_grad=True,
                 device=self.device
                 )
-            )
-
+        )
+    
     def _get_func_params(self, 
         ) -> Tuple[Tensor]:
 
         assert self.linear_coeffs[None, :].shape[-1] == self.bases_spanning_subspace.shape[-1]
 
-        weights = self.mean_params_bias + torch.inner(
+        weights = self.pretrained_weights + torch.inner(
             self.linear_coeffs, self.bases_spanning_subspace
-            ) 
+            )
         cnt = 0
         func_weights = []
         for params in self.nn_model.parameters():
@@ -82,6 +85,14 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         return self.func_model_with_input(
             self._get_func_params(), self.net_input)
 
+    def objective(self, criterion, noisy_observation, use_tv_loss, gamma, return_output=True):
+
+        output = self.forward() 
+        loss = criterion(self.ray_trafo(output), noisy_observation)
+        if use_tv_loss:
+            loss = loss + gamma*tv_loss(output)
+        return loss if not return_output else (loss, output)
+
     def reconstruct(self,
             noisy_observation: Tensor,
             filtbackproj: Optional[Tensor] = None,
@@ -91,55 +102,6 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
             log_path: str = '.',
             show_pbar: bool = True,
             optim_kwargs=None) -> Tensor:
-        """
-        Reconstruct (by "training" the DIP network).
-
-        Parameters
-        ----------
-        subspace : Tensor
-            Bases defying subspace. Size. (num_params, subspace_dim)   
-        mean : Tensor
-            NN parameters mean. Scalar.
-        noisy_observation : Tensor
-            Noisy observation. Shape: ``(1, 1, *self.ray_trafo.obs_shape)``.
-        filtbackproj : Tensor, optional
-            Filtered back-projection. Used as the network input if `recon_from_randn` is not `True`.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``
-        ground_truth : Tensor, optional
-            Ground truth. Used to print and log PSNR values.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``
-        recon_from_randn : bool, optional
-            If `True`, normal distributed noise with std-dev 0.1 is used as the network input;
-            if `False` (the default), `filtbackproj` is used as the network input.
-        use_tv_loss : bool, optional
-            Whether to include the TV loss term.
-            The default is `True`.
-        log_path : str, optional
-            Path for saving tensorboard logs. Each call to reconstruct creates a sub-folder
-            in `log_path`, starting with the time of the reconstruction call.
-            The default is `'.'`.
-        show_pbar : bool, optional
-            Whether to show a progress bar.
-            The default is `True`.
-        optim_kwargs : dict, optional
-            Keyword arguments for optimization.
-            The following arguments are supported:
-
-            * `gamma` (float)
-                Weighting factor of the TV loss term, the default is ``1e-4``.
-            * `lr` (float)
-                Learning rate, the default is ``1e-4``.
-            * `iterations` (int)
-                Number of iterations, the default is ``10000``.
-            * `loss_function` (str)
-                Discrepancy loss function, the default is ``'mse'``.
-
-        Returns
-        -------
-        best_output : Tensor
-            Model output with the minimum loss achieved during the training.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``.
-        """
 
         writer = tensorboardX.SummaryWriter(
                 logdir=os.path.join(log_path, '_'.join((
@@ -154,19 +116,28 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         optim_kwargs.setdefault('loss_function', 'mse')
 
         self.set_nn_model_require_grad(False)
-
         self.nn_model.train()
 
         self.net_input = (
             0.1 * torch.randn(1, 1, *self.ray_trafo.im_shape, device=self.device)
             if recon_from_randn else
-            filtbackproj.to(self.device))
-            
-        self.optimizer = torch.optim.Adam(
-            [self.linear_coeffs],
-            lr=optim_kwargs['lr'],
-            weight_decay=optim_kwargs['weight_decay']
+            filtbackproj.to(self.device)
         )
+
+        if optim_kwargs['optimizer'] == 'adam':
+            self.optimizer = torch.optim.Adam(
+                [self.linear_coeffs],
+                lr=optim_kwargs['lr'],
+                weight_decay=optim_kwargs['weight_decay']
+                )
+        
+        elif optim_kwargs['optimizer'] == 'lbfgs':
+            self.optimizer = torch.optim.LBFGS(
+                [self.linear_coeffs], lr=optim_kwargs['lr'],
+            )
+        
+        else: 
+            raise NotImplementedError
 
         noisy_observation = noisy_observation.to(self.device)
         if optim_kwargs['loss_function'] == 'mse':
@@ -192,7 +163,7 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         writer.add_image('base_recon', normalize(
                self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
         
-        print('DIP reconstruction of sample')
+        print('PreTrained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 
@@ -201,10 +172,7 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
 
             for i in pbar:
                 self.optimizer.zero_grad()
-                output = self.forward() 
-                loss = criterion(self.ray_trafo(output), noisy_observation)
-                if use_tv_loss:
-                    loss = loss + optim_kwargs['gamma'] * tv_loss(output)
+                loss, output = self.objective(criterion, noisy_observation, use_tv_loss, optim_kwargs['gamma'])
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.nn_model.parameters(), max_norm=1)
 
@@ -213,7 +181,15 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
                     min_loss_state['output'] = output.detach()
                     min_loss_state['params_state_dict'] = deepcopy(self.linear_coeffs)
 
-                self.optimizer.step()
+                self.optimizer.step() if optim_kwargs['optimizer'] == 'adam' else self.optimizer.step(
+                        lambda: self.objective(
+                            criterion, 
+                            noisy_observation, 
+                            use_tv_loss, 
+                            optim_kwargs['gamma'], 
+                            return_output=False
+                        )
+                    )
 
                 for p in self.nn_model.parameters():
                     p.data.clamp_(-1000, 1000) # MIN,MAX

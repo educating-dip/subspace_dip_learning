@@ -51,11 +51,6 @@ def coordinator(cfg : DictConfig) -> None:
         device=device
     )
 
-    mean_params_bias = subspace_constructor.compute_traj_samples_mean(
-        params_traj_samples=subspace_constructor.params_traj_samples,
-        device=device
-    )
-
     dataset = get_standard_dataset(
             cfg, 
             ray_trafo, 
@@ -74,7 +69,6 @@ def coordinator(cfg : DictConfig) -> None:
         reconstructor = SubspaceDeepImagePrior(
                 ray_trafo=ray_trafo,
                 bases_spanning_subspace=bases_spanning_subspace,
-                mean_params_bias=mean_params_bias,
                 state_dict=base_reconstructor.nn_model.state_dict(),
                 torch_manual_seed=cfg.dip.torch_manual_seed,
                 device=device, 
@@ -92,6 +86,7 @@ def coordinator(cfg : DictConfig) -> None:
                 'weight_decay': cfg.subspace.optim.weight_decay, 
                 'iterations': cfg.subspace.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
+                'optimizer': cfg.dip.optim.optimizer,
                 'gamma': cfg.dip.optim.gamma
             }
 

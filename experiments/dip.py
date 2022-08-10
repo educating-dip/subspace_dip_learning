@@ -32,10 +32,6 @@ def coordinator(cfg : DictConfig) -> None:
                 device=device, 
                 net_kwargs=net_kwargs
             )
-    if cfg.load_dip_models_from_path is not None: 
-        reconstructor.load_pretrain_model(
-            learned_params_path=cfg.load_dip_models_from_path)
-            
 
     dataset = get_standard_dataset(
             cfg, 
@@ -51,7 +47,7 @@ def coordinator(cfg : DictConfig) -> None:
 
         if cfg.seed is not None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
-
+        
         observation, ground_truth, filtbackproj = data_sample
 
         observation = observation.to(dtype=dtype, device=device)
@@ -63,6 +59,15 @@ def coordinator(cfg : DictConfig) -> None:
                 'iterations': cfg.dip.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
                 'gamma': cfg.dip.optim.gamma}
+        
+        if cfg.load_dip_models_from_path is not None: 
+            reconstructor.load_pretrain_model(
+                learned_params_path=cfg.load_dip_models_from_path
+            )
+        else: 
+            reconstructor.init_nn_model(
+                torch_manual_seed=cfg.seed
+            )
 
         recon = reconstructor.reconstruct(
                 noisy_observation = observation,
@@ -70,7 +75,9 @@ def coordinator(cfg : DictConfig) -> None:
                 ground_truth=ground_truth,
                 recon_from_randn=cfg.dip.recon_from_randn,
                 log_path=cfg.dip.log_path,
-                optim_kwargs=optim_kwargs)
+                optim_kwargs=optim_kwargs
+            )
+        
 
         torch.save(reconstructor.nn_model.state_dict(),
                 './dip_model_{}.pt'.format(i))

@@ -44,14 +44,14 @@ class SubspaceConstructor:
         )
         self.params_traj_samples = []
 
-    def add_params_traj_samples(self, ) -> List[Tensor]:
-        
-        self.params_traj_samples.append(
-            get_params_from_nn_module(
+    def add_params_traj_samples(self, use_cpu: bool = True) -> List[Tensor]:
+    
+        param_vec = get_params_from_nn_module(
                 self.model,
                 exclude_norm_layers=self.exclude_norm_layers,
-                include_bias=self.include_bias
-            )
+                include_bias=self.include_bias)
+        self.params_traj_samples.append(
+            param_vec if not use_cpu else param_vec.cpu()
         )
     
     def save_params_traj_samples(self, 
@@ -86,51 +86,65 @@ class SubspaceConstructor:
             use_cpu : bool = True
         ) -> Tensor:
 
+        def gramschmidt(
+                ortho_bases: Tensor, 
+                randn_projs: Tensor
+            ):
+
+            """
+            This methods implements the Gram-Schmidt process, which takes a finite, linearly independent set of vectors 
+            S = {ortho_bases_1, ..., ortho_bases_{k-num_rand_projs}, ... randn_projs_{k} }, and generates an orthogonal 
+            set S' = {u1, ..., uk} that spans the same k-dimensional subspace as S. Here, we assume that randn_projs are 
+            linearly independent.
+            See https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process#The_Gram%E2%80%93Schmidt_process.
+
+            """
+            
+            assert ortho_bases.ndim == randn_projs.ndim
+            assert ortho_bases.shape[0] == randn_projs.shape[0]
+            num_rand_projs = randn_projs.shape[1]
+            for i in range(num_rand_projs):
+                randn_projs[:, i] -= ( 
+                        (randn_projs[:, i, None] * ortho_bases).sum(dim=0) * ortho_bases 
+                    ).sum(dim=-1) 
+                randn_projs[:, i] /= torch.norm(randn_projs[:, i], 2)
+                ortho_bases = torch.cat( 
+                        (ortho_bases, randn_projs[:, i, None]), 
+                        dim=-1
+                    )
+            return ortho_bases
+
         def _add_random_projs(
-                bases: Tensor,
+                ortho_bases: Tensor,
                 num_rand_projs: int
                 ) -> Tensor:
             
-            randn_projs = torch.randn( (bases.shape[0], num_rand_projs), 
-                device=bases.device
-            )
-            randn_projs_norm = torch.norm(randn_projs, 2, dim=0, keepdim=True)
-            randn_projs_scaled = randn_projs.div(randn_projs_norm)
+            randn_projs = torch.randn( (ortho_bases.shape[0], num_rand_projs) 
+                )
+            return gramschmidt(ortho_bases=ortho_bases, randn_projs=randn_projs)
 
-            return torch.cat((bases, randn_projs_scaled), dim=-1)
-        
         assert params_traj_samples
         subspace_dim = subspace_dim if subspace_dim is not None else len(params_traj_samples)
         params_mat = torch.moveaxis(
             torch.stack(params_traj_samples), (0, 1), (1, 0)
             ) # (num_params, subspace_dim)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
-        bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim, dtype=params_mat.dtype)
+        ortho_bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim)
         
         if num_rand_projs is not None: 
-            bases = _add_random_projs(
-                bases=bases,
+            ortho_bases = _add_random_projs(
+                ortho_bases=ortho_bases,
                 num_rand_projs=num_rand_projs
             )
         
         """
         Returns
         -------
-        bases : Tensor Size. (num_params, subspace_dim + num_rand_projs)
+        ortho_bases : Tensor Size. (num_params, subspace_dim or subspace_dim+num_rand_projs)
         """
-        return bases.detach().to(device=device) if not return_singular_values else (
-            bases.detach().to(device=device), singular_values.detach().to(device=device)
+        return ortho_bases.detach().to(device=device) if not return_singular_values else (
+            ortho_bases.detach().to(device=device), singular_values.detach().to(device=device)
         )
-
-    @classmethod
-    def compute_traj_samples_mean(cls,
-        params_traj_samples : List[Tensor],
-        device = None, 
-    ):
-        params_mat = torch.moveaxis(
-            torch.stack(params_traj_samples), (0, 1), (1, 0)
-            )
-        return params_mat.mean(dim=-1).to(device=device) # scalar
 
     def sample(self, 
         ray_trafo : BaseRayTrafo,
@@ -149,7 +163,6 @@ class SubspaceConstructor:
             torch.random.manual_seed(optim_kwargs['torch_manual_seed'])
 
         # create PyTorch datasets
-
         criterion = torch.nn.MSELoss()
         self.init_optimizer(optim_kwargs=optim_kwargs)
 

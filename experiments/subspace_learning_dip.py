@@ -56,7 +56,7 @@ def coordinator(cfg : DictConfig) -> None:
             'weight_decay': cfg.subspace.training.optim.weight_decay,
         },
         'scheduler': {
-            'name': 'cosine',
+            'name': cfg.subspace.training.optim.scheduler_name,
             'train_len': cfg.dataset.length,
             'lr_min': cfg.subspace.training.optim.lr_min,
             'max_lr': cfg.subspace.training.optim.max_lr
