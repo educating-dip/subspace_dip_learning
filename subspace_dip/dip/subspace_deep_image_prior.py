@@ -50,15 +50,17 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         )
         self._setup()
     
-    def _setup(self, ) -> None:
-
-        self.linear_coeffs = nn.Parameter(
-            torch.zeros(
+    def _setup(self, use_random_init: bool = True) -> None:
+    
+        init_params = torch.zeros(
                 self.bases_spanning_subspace.shape[-1],
                 requires_grad=True,
                 device=self.device
                 )
-        )
+        if use_random_init: 
+            init_params = torch.randn_like(init_params)
+            init_params /= init_params.pow(2).sum()
+        self.linear_coeffs = nn.Parameter(init_params)
     
     def _get_func_params(self, 
         ) -> Tuple[Tensor]:
@@ -167,8 +169,7 @@ class SubspaceDeepImagePrior(Module, BaseDeepImagePrior):
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
 
-        with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar,
-                miniters=optim_kwargs['iterations']//100) as pbar:
+        with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar) as pbar:
 
             for i in pbar:
                 self.optimizer.zero_grad()
