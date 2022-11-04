@@ -1,7 +1,7 @@
 net:
-  scales: 4
-  channels: [128, 128, 128, 128]
-  skip_channels: [0, 0, 4, 4]
+  scales: 6
+  channels: [128, 128, 128, 128, 128, 128]
+  skip_channels: [0, 0, 0, 0, 4, 4]
   use_norm: True
   use_sigmoid: False
   sigmoid_saturation_thresh: 15

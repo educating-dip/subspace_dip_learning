@@ -15,6 +15,10 @@ def get_ray_trafo(name, kwargs):
         ray_trafo = get_parallel_beam_2d_matmul_ray_trafo(
                 im_shape=kwargs['im_shape'], num_angles=kwargs['num_angles'],
                 angular_sub_sampling=kwargs['angular_sub_sampling'])
+    elif name == 'cartoonset':
+        ray_trafo = get_parallel_beam_2d_matmul_ray_trafo(
+                im_shape=kwargs['im_shape'], num_angles=kwargs['num_angles'],
+                angular_sub_sampling=kwargs['angular_sub_sampling'])
     else: 
         raise ValueError
 

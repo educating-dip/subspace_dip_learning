@@ -140,3 +140,5 @@ experiments/KMNIST/*
 experiments/MNIST/*
 experiments/outputs/*
 experiments/multirun/*
+
+data/*

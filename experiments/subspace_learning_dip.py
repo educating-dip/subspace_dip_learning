@@ -1,11 +1,8 @@
-from itertools import islice
 import hydra
 from omegaconf import DictConfig
 import torch
-from torch.utils.data import DataLoader
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
-from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, SubspaceConstructor
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo
+from subspace_dip.dip import DeepImagePrior, ParameterSampler, LinearSubspace
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -36,7 +33,7 @@ def coordinator(cfg : DictConfig) -> None:
         base_reconstructor.load_pretrain_model(
             learned_params_path=cfg.load_dip_models_from_path)
             
-    subspace_constructor = SubspaceConstructor(
+    sampler = ParameterSampler(
             model=base_reconstructor.nn_model,
             device=device
         )
@@ -46,20 +43,20 @@ def coordinator(cfg : DictConfig) -> None:
         'seed': cfg.seed, 
         'torch_manual_seed': cfg.dip.torch_manual_seed,
         'save_best_learned_params_path': './',
-        'save_best_learned_params_per_epoch': cfg.subspace.training.save_best_learned_params_per_epoch,
-        'epochs': cfg.subspace.training.num_epochs,
-        'num_samples': cfg.subspace.sampling.num_samples,
-        'burn_in': cfg.subspace.sampling.burn_in,
-        'batch_size': cfg.subspace.training.batch_size,
+        'save_best_learned_params_per_epoch': cfg.sampler.training.save_best_learned_params_per_epoch,
+        'epochs': cfg.sampler.training.num_epochs,
+        'num_samples': cfg.sampler.sampling.num_samples,
+        'burn_in': cfg.sampler.sampling.burn_in,
+        'batch_size': cfg.sampler.training.batch_size,
         'optimizer': {
-            'lr': cfg.subspace.training.optim.lr,
-            'weight_decay': cfg.subspace.training.optim.weight_decay,
+            'lr': cfg.sampler.training.optim.lr,
+            'weight_decay': cfg.sampler.training.optim.weight_decay,
         },
         'scheduler': {
-            'name': cfg.subspace.training.optim.scheduler_name,
+            'name': cfg.sampler.training.optim.scheduler_name,
             'train_len': cfg.dataset.length,
-            'lr_min': cfg.subspace.training.optim.lr_min,
-            'max_lr': cfg.subspace.training.optim.max_lr
+            'lr_min': cfg.sampler.training.optim.lr_min,
+            'max_lr': cfg.sampler.training.optim.max_lr
         }
     }
 
@@ -70,11 +67,24 @@ def coordinator(cfg : DictConfig) -> None:
         'use_fixed_seeds_starting_from': cfg.seed, 
     }
 
-    subspace_constructor.sample(
+    sampler.sample(
         ray_trafo=ray_trafo,
         dataset_kwargs=dataset_kwargs, 
-        optim_kwargs=optim_kwargs
+        optim_kwargs=optim_kwargs, 
+        save_samples=cfg.sampler.sampling.save_samples
     )
+
+    subspace = LinearSubspace(
+        parameters_samples_list=sampler.parameters_samples, 
+        subspace_dim=cfg.subspace.subspace_dim,
+        use_random_init=cfg.subspace.use_random_init,
+        num_random_projs=cfg.subspace.num_random_projs,
+        device=device
+    )
+    
+    subspace.save_ortho_basis(
+        ortho_basis_path=cfg.subspace.ortho_basis_path
+        )
 
 if __name__ == '__main__':
     coordinator()

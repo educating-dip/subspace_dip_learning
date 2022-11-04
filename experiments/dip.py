@@ -18,30 +18,31 @@ def coordinator(cfg : DictConfig) -> None:
 
     # data: observation, ground_truth, filtbackproj
     net_kwargs = {
-            'scales': cfg.dip.net.scales,
-            'channels': cfg.dip.net.channels,
-            'skip_channels': cfg.dip.net.skip_channels,
-            'use_norm': cfg.dip.net.use_norm,
-            'use_sigmoid': cfg.dip.net.use_sigmoid,
-            'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
-        }
+        'scales': cfg.dip.net.scales,
+        'channels': cfg.dip.net.channels,
+        'skip_channels': cfg.dip.net.skip_channels,
+        'use_norm': cfg.dip.net.use_norm,
+        'use_sigmoid': cfg.dip.net.use_sigmoid,
+        'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
+    }
 
     reconstructor = DeepImagePrior(
-                ray_trafo, 
-                torch_manual_seed=cfg.dip.torch_manual_seed,
-                device=device, 
-                net_kwargs=net_kwargs
-            )
+        ray_trafo, 
+        torch_manual_seed=cfg.dip.torch_manual_seed,
+        device=device, 
+        net_kwargs=net_kwargs
+    )
 
     dataset = get_standard_dataset(
-            cfg, 
-            ray_trafo, 
-            use_fixed_seeds_starting_from=cfg.seed,
-            device=device, 
-        )
+        cfg,
+        ray_trafo,
+        use_fixed_seeds_starting_from=cfg.seed,
+        device=device, 
+    )
 
     # within subspace optimization 
     for i, data_sample in enumerate(islice(DataLoader(dataset), cfg.num_images)):
+
         if i < cfg.get('skip_first_images', 0):
             continue
 
@@ -49,7 +50,7 @@ def coordinator(cfg : DictConfig) -> None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
         
         observation, ground_truth, filtbackproj = data_sample
-
+        
         observation = observation.to(dtype=dtype, device=device)
         filtbackproj = filtbackproj.to(dtype=dtype, device=device)
         ground_truth = ground_truth.to(dtype=dtype, device=device)
@@ -70,14 +71,13 @@ def coordinator(cfg : DictConfig) -> None:
             )
 
         recon = reconstructor.reconstruct(
-                noisy_observation = observation,
-                filtbackproj=filtbackproj,
-                ground_truth=ground_truth,
-                recon_from_randn=cfg.dip.recon_from_randn,
-                log_path=cfg.dip.log_path,
-                optim_kwargs=optim_kwargs
-            )
-        
+            noisy_observation = observation,
+            filtbackproj=filtbackproj,
+            ground_truth=ground_truth,
+            recon_from_randn=cfg.dip.recon_from_randn,
+            log_path=cfg.dip.log_path,
+            optim_kwargs=optim_kwargs
+        )
 
         torch.save(reconstructor.nn_model.state_dict(),
                 './dip_model_{}.pt'.format(i))

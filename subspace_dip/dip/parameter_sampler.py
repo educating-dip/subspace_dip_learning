@@ -1,40 +1,37 @@
 """
 Provides :class:`SubspaceConstructor`.
 """
-from typing import Dict, Optional, List
+from typing import Dict, List
 import os
 import socket
 import datetime
 import torch
 import numpy as np
 import tensorboardX
-import tensorly as tl 
-tl.set_backend('pytorch')
 import torch.nn as nn
+
 from torch import Tensor
 from copy import deepcopy
 from math import ceil
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
+
 from subspace_dip.utils import PSNR, normalize, get_original_cwd
 from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils import get_params_from_nn_module
 from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
 
-
-class SubspaceConstructor:
-
+class ParameterSampler:
     """
     Wrapper for constructing a low-dimensional subspace of the NN optimisation trajectory.
     """
-
     def __init__(self, 
-            model : nn.Module,
-            exclude_norm_layers : bool = False, 
-            include_bias : bool = True, 
-            device = None, 
-            ):
+        model: nn.Module,
+        exclude_norm_layers: bool = False, 
+        include_bias: bool = True, 
+        device = None, 
+        ):
         
         self.model = model
         self.exclude_norm_layers = exclude_norm_layers
@@ -42,114 +39,23 @@ class SubspaceConstructor:
         self.device = device or torch.device(
             ('cuda:0' if torch.cuda.is_available() else 'cpu')
         )
-        self.params_traj_samples = []
+        self.parameters_samples = []
 
-    def add_params_traj_samples(self, use_cpu: bool = True) -> List[Tensor]:
+    def add_parameters_samples(self, use_cpu: bool = True) -> List[Tensor]:
     
-        param_vec = get_params_from_nn_module(
+        parameter_vec = get_params_from_nn_module(
                 self.model,
                 exclude_norm_layers=self.exclude_norm_layers,
                 include_bias=self.include_bias)
-        self.params_traj_samples.append(
-            param_vec if not use_cpu else param_vec.cpu()
+        self.parameters_samples.append(
+            parameter_vec if not use_cpu else parameter_vec.cpu()
         )
     
-    def save_params_traj_samples(self, 
-        name: str = 'params_traj_samples',
-        path: str = './'
-    ):
-
-        path = path if path.endswith('.pt') else path + name + '.pt'
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        torch.save(self.params_traj_samples, path)
-
-         
-    def load_params_traj_samples(self, 
-        path_to_params_traj_samples: str, 
-        device = None
-        ):
-        
-        path = os.path.join(get_original_cwd(), 
-            path_to_params_traj_samples if path_to_params_traj_samples.endswith('.pt') \
-                else path_to_params_traj_samples + '.pt')
-        self.params_traj_samples.extend(
-            torch.load(path, map_location=device)
-        )
-    
-    @classmethod
-    def compute_bases_subspace(cls,
-            params_traj_samples : List[Tensor], 
-            subspace_dim : Optional[int] = None,
-            num_rand_projs: Optional[int] = None,
-            return_singular_values : bool = False,
-            device = None, 
-            use_cpu : bool = True
-        ) -> Tensor:
-
-        def gramschmidt(
-                ortho_bases: Tensor, 
-                randn_projs: Tensor
-            ):
-
-            """
-            This methods implements the Gram-Schmidt process, which takes a finite, linearly independent set of vectors 
-            S = {ortho_bases_1, ..., ortho_bases_{k-num_rand_projs}, ... randn_projs_{k} }, and generates an orthogonal 
-            set S' = {u1, ..., uk} that spans the same k-dimensional subspace as S. Here, we assume that randn_projs are 
-            linearly independent.
-            See https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process#The_Gram%E2%80%93Schmidt_process.
-
-            """
-            
-            assert ortho_bases.ndim == randn_projs.ndim
-            assert ortho_bases.shape[0] == randn_projs.shape[0]
-            num_rand_projs = randn_projs.shape[1]
-            for i in range(num_rand_projs):
-                randn_projs[:, i] -= ( 
-                        (randn_projs[:, i, None] * ortho_bases).sum(dim=0) * ortho_bases 
-                    ).sum(dim=-1) 
-                randn_projs[:, i] /= torch.norm(randn_projs[:, i], 2)
-                ortho_bases = torch.cat( 
-                        (ortho_bases, randn_projs[:, i, None]), 
-                        dim=-1
-                    )
-            return ortho_bases
-
-        def _add_random_projs(
-                ortho_bases: Tensor,
-                num_rand_projs: int
-                ) -> Tensor:
-            
-            randn_projs = torch.randn( (ortho_bases.shape[0], num_rand_projs) 
-                )
-            return gramschmidt(ortho_bases=ortho_bases, randn_projs=randn_projs)
-
-        assert params_traj_samples
-        subspace_dim = subspace_dim if subspace_dim is not None else len(params_traj_samples)
-        params_mat = torch.moveaxis(
-            torch.stack(params_traj_samples), (0, 1), (1, 0)
-            ) # (num_params, subspace_dim)
-        params_mat = params_mat if not use_cpu else params_mat.cpu()
-        ortho_bases, singular_values, _  = tl.partial_svd(params_mat, n_eigenvecs=subspace_dim)
-        
-        if num_rand_projs is not None: 
-            ortho_bases = _add_random_projs(
-                ortho_bases=ortho_bases,
-                num_rand_projs=num_rand_projs
-            )
-        
-        """
-        Returns
-        -------
-        ortho_bases : Tensor Size. (num_params, subspace_dim or subspace_dim+num_rand_projs)
-        """
-        return ortho_bases.detach().to(device=device) if not return_singular_values else (
-            ortho_bases.detach().to(device=device), singular_values.detach().to(device=device)
-        )
-
     def sample(self, 
         ray_trafo : BaseRayTrafo,
         dataset_kwargs : Dict, 
-        optim_kwargs : Dict
+        optim_kwargs : Dict,
+        save_samples: bool = False
         ):
 
         current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
@@ -189,12 +95,12 @@ class SubspaceConstructor:
         # create PyTorch dataloaders
         data_loaders = {
             'train': DataLoader(
-                dataset_train, 
+                dataset_train,
                 batch_size=optim_kwargs['batch_size'],
                 shuffle=True
             ),
             'validation': DataLoader(
-                dataset_validation, 
+                dataset_validation,
                 batch_size=optim_kwargs['batch_size'],
                 shuffle=False
             )
@@ -207,9 +113,9 @@ class SubspaceConstructor:
             ) * optim_kwargs['epochs']
 
         sample_idx_sequence = np.linspace(
-            optim_kwargs['burn_in'], 
-            num_overall_updates, 
-            optim_kwargs['num_samples'] + 1, 
+            optim_kwargs['burn_in'],
+            num_overall_updates,
+            optim_kwargs['num_samples'] + 1,
             dtype=int
             )
 
@@ -260,7 +166,7 @@ class SubspaceConstructor:
                                 self._optimizer.step()
 
                                 if num_grad_updates in sample_idx_sequence:
-                                    self.add_params_traj_samples()        
+                                    self.add_parameters_samples()
 
                                 if (self._scheduler is not None and
                                         schedule_every_batch):
@@ -321,7 +227,7 @@ class SubspaceConstructor:
         self.model.load_state_dict(best_model_wts)
         
         self.writer.close()
-        self.save_params_traj_samples()
+        if save_samples: self.add_parameters_samples()
 
     def init_optimizer(self, optim_kwargs: Dict):
         """
@@ -393,3 +299,24 @@ class SubspaceConstructor:
                         else 'cpu')
         state_dict = torch.load(path, map_location=map_location)
         self.model.load_state_dict(state_dict)
+
+    def save_parameters_samples(self, 
+        name: str = 'parameters_samples',
+        path: str = './'
+        ):
+
+        path = path if path.endswith('.pt') else path + name + '.pt'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.parameters_samples, path)
+
+    def load_parameter_samples(self, 
+        path_to_parameters_samples: str, 
+        device = None
+        ):
+        
+        path = os.path.join(get_original_cwd(), 
+            path_to_parameters_samples if path_to_parameters_samples.endswith('.pt') \
+                else path_to_parameters_samples + '.pt')
+        self.parameters_samples.extend(
+            torch.load(path, map_location=device)
+        )

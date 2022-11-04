@@ -1,8 +1,9 @@
 defaults:
   - dataset: ellipses
   - trafo: simple_trafo
-  - dip: unet
-  - subspace: subspace
+  - dip: small_unet
+  - sampler: base_sampler
+  - subspace: base_subspace
 seed: 1
 num_images: 1
 load_dip_models_from_path: null

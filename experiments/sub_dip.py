@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
 from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, SubspaceConstructor
+from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -34,20 +34,12 @@ def coordinator(cfg : DictConfig) -> None:
     
     base_reconstructor.load_pretrain_model(
         learned_params_path=cfg.load_dip_models_from_path)
-            
-    subspace_constructor = SubspaceConstructor(
-            model=base_reconstructor.nn_model,
-            device=device
-        )
 
-    subspace_constructor.load_params_traj_samples(
-            path_to_params_traj_samples=cfg.path_to_params_traj_samples
-        )
-
-    bases_spanning_subspace = subspace_constructor.compute_bases_subspace(
-        params_traj_samples=subspace_constructor.params_traj_samples,
-        subspace_dim=cfg.subspace.low_rank_subspace_dim,
-        num_rand_projs=cfg.subspace.num_random_projs,
+    subspace = LinearSubspace(
+        subspace_dim=cfg.subspace.subspace_dim,
+        use_random_init=cfg.subspace.use_random_init,
+        num_random_projs=cfg.subspace.num_random_projs,
+        load_ortho_basis_path=cfg.subspace.ortho_basis_path,
         device=device
     )
 
@@ -67,12 +59,12 @@ def coordinator(cfg : DictConfig) -> None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
 
         reconstructor = SubspaceDeepImagePrior(
-                ray_trafo=ray_trafo,
-                bases_spanning_subspace=bases_spanning_subspace,
-                state_dict=base_reconstructor.nn_model.state_dict(),
-                torch_manual_seed=cfg.dip.torch_manual_seed,
-                device=device, 
-                net_kwargs=net_kwargs
+            ray_trafo=ray_trafo,
+            subspace=subspace,
+            state_dict=base_reconstructor.nn_model.state_dict(),
+            torch_manual_seed=cfg.dip.torch_manual_seed,
+            device=device, 
+            net_kwargs=net_kwargs
             )
     
         observation, ground_truth, filtbackproj = data_sample

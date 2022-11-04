@@ -22,21 +22,18 @@ def get_ground_truth(data_path, walnut_id, orbit_id, slice_ind):
 
 class WalnutPatchesDataset(torch.utils.data.IterableDataset):
     """
-    Dataset with images of multiple random rectangles.
-    The images are normalized to have a value range of ``[0., 1.]`` with a
-    background value of ``0.``.
+    Dataset with images of multiple random patches of a Walnut.
     """
     def __init__(self, 
         data_path: str = './', 
         shape: Tuple[int, int] = (128, 128),
         max_patches: int = 32,
-        walnut_id: int = 1, 
-        orbit_id: int = 2, 
-        slice_ind: int = 253, 
+        walnut_id: int = 1,
+        orbit_id: int = 2,
+        slice_ind: int = 253,
         fixed_seed: int = 1
         ):
         super().__init__()
-
 
         self.shape = shape
         self.max_patches = max_patches

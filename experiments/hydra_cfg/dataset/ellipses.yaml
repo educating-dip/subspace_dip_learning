@@ -1,4 +1,4 @@
 name: ellipses
 im_size: 128
-length : 32000
+length : 320
 noise_stddev: 0.05
