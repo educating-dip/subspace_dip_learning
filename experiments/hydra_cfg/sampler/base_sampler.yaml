@@ -12,7 +12,3 @@ sampling:
   save_samples: True
   num_samples: 10
   burn_in: 5
-optim:
-  lr: 1e-2
-  weight_decay: 1e-6 
-  iterations: 10000

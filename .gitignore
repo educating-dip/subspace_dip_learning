@@ -142,3 +142,4 @@ experiments/outputs/*
 experiments/multirun/*
 
 data/*
+/data

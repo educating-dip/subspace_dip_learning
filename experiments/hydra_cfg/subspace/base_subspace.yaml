@@ -2,3 +2,10 @@ subspace_dim: 200
 num_random_projs: null
 use_random_init: True
 ortho_basis_path: ./
+optim:
+  iterations: 1000
+  lr: 1e-1
+  weight_decay: 0.
+  loss_function: mse
+  gamma: 1e-4
+  optimizer: adam

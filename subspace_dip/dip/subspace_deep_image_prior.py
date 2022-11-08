@@ -32,7 +32,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         net_kwargs=None
         ):
 
-        super().__init__(self,
+        super().__init__(
             ray_trafo=ray_trafo,
             torch_manual_seed=torch_manual_seed,
             device=device,
@@ -141,7 +141,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         min_loss_state = {
             'loss': np.inf,
             'output': self.nn_model(self.net_input).detach(),  # pylint: disable=not-callable
-            'params_state_dict': deepcopy(self.linear_coeffs),
+            'params_state_dict': self.subspace.state_dict(),
         }
 
         if ground_truth is not None:
@@ -179,7 +179,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                 if loss.item() < min_loss_state['loss']:
                     min_loss_state['loss'] = loss.item()
                     min_loss_state['output'] = output.detach()
-                    min_loss_state['params_state_dict'] = deepcopy(self.linear_coeffs)
+                    min_loss_state['params_state_dict'] = self.subspace.state_dict()
 
                 if optim_kwargs['optimizer'] == 'adam': 
                     self.optimizer.step()
@@ -213,7 +213,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                     writer.add_image('reco', normalize(
                             min_loss_state['output'][0, ...]).cpu().numpy(), i)
 
-        self.linear_coeffs = min_loss_state['params_state_dict']
+        self.subspace.load_state_dict(
+            min_loss_state['params_state_dict']
+            )
         writer.close()
 
         return min_loss_state['output']

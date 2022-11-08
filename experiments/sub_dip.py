@@ -74,12 +74,12 @@ def coordinator(cfg : DictConfig) -> None:
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         optim_kwargs = {
-                'lr': cfg.subspace.optim.lr,
-                'weight_decay': cfg.subspace.optim.weight_decay, 
-                'iterations': cfg.subspace.optim.iterations,
-                'loss_function': cfg.dip.optim.loss_function,
-                'optimizer': cfg.dip.optim.optimizer,
-                'gamma': cfg.dip.optim.gamma
+            'lr': cfg.subspace.optim.lr,
+            'weight_decay': cfg.subspace.optim.weight_decay, 
+            'iterations': cfg.subspace.optim.iterations,
+            'loss_function': cfg.subspace.optim.loss_function,
+            'optimizer': cfg.subspace.optim.optimizer,
+            'gamma': cfg.subspace.optim.gamma
             }
 
         recon = reconstructor.reconstruct(
