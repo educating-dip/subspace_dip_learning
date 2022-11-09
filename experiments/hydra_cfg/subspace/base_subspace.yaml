@@ -2,10 +2,17 @@ subspace_dim: 200
 num_random_projs: null
 use_random_init: True
 ortho_basis_path: ./
-optim:
+subspace_fine_tuning_kwargs:
   iterations: 1000
-  lr: 1e-1
-  weight_decay: 0.
   loss_function: mse
-  gamma: 1e-4
-  optimizer: adam
+  optim:
+    optimizer: adam
+    lr: 1e-1
+    weight_decay: 0.
+    gamma: 1e-4
+set_subspace_parameters_kwargs:
+  epochs: 10
+  batch_size: 8 
+  optim:
+    lr: 1e-2
+    weight_decay: 0.

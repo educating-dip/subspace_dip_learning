@@ -1,7 +1,7 @@
 """
 Provides :class:`SubspaceDeepImagePrior`.
 """
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Dict
 import os
 import socket
 import datetime
@@ -11,10 +11,10 @@ import functorch as ftch
 import tensorboardX
 
 from warnings import warn
-from copy import deepcopy
 from torch import Tensor
 from torch.nn import MSELoss
 from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
 from subspace_dip.data import BaseRayTrafo
@@ -68,9 +68,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         for params in self.nn_model.parameters():
             params.requires_grad_(set_require_grad)
 
-    def forward(self) -> Tensor:
+    def forward(self, input: Tensor = None) -> Tensor:
         return self.func_model_with_input(
-            self._get_func_params(), self.net_input)
+            self._get_func_params(), self.net_input if input is None else input)
 
     def objective(self,
         criterion,
@@ -94,7 +94,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         use_tv_loss: bool = True,
         log_path: str = '.',
         show_pbar: bool = True,
-        optim_kwargs=None
+        optim_kwargs: Dict = None
         ) -> Tensor:
 
         writer = tensorboardX.SummaryWriter(
@@ -102,12 +102,6 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                         datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                         socket.gethostname(),
                         '_Subspace_DIP' if not use_tv_loss else '_Subspace_DIP+TV'))))
-
-        optim_kwargs = optim_kwargs or {}
-        optim_kwargs.setdefault('gamma', 1e-4)
-        optim_kwargs.setdefault('lr', 1e-4)
-        optim_kwargs.setdefault('iterations', 10000)
-        optim_kwargs.setdefault('loss_function', 'mse')
 
         self.set_nn_model_require_grad(False)
         self.nn_model.train()
@@ -118,15 +112,15 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
             filtbackproj.to(self.device)
         )
 
-        if optim_kwargs['optimizer'] == 'adam':
+        if optim_kwargs['optim']['optimizer'] == 'adam':
             self.optimizer = torch.optim.Adam(
                 [self.subspace.parameters_vec],
-                lr=optim_kwargs['lr'],
-                weight_decay=optim_kwargs['weight_decay']
+                lr=optim_kwargs['optim']['lr'],
+                weight_decay=optim_kwargs['optim']['weight_decay']
                 )
-        elif optim_kwargs['optimizer'] == 'lbfgs':
+        elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
             self.optimizer = torch.optim.LBFGS(
-                [self.subspace.parameters_vec], lr=optim_kwargs['lr'],
+                [self.subspace.parameters_vec], lr=optim_kwargs['optim']['lr'],
             )
         else: 
             raise NotImplementedError
@@ -169,7 +163,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                     criterion,
                     noisy_observation,
                     use_tv_loss,
-                    optim_kwargs['gamma']
+                    optim_kwargs['optim']['gamma']
                     )
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
@@ -181,15 +175,15 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                     min_loss_state['output'] = output.detach()
                     min_loss_state['params_state_dict'] = self.subspace.state_dict()
 
-                if optim_kwargs['optimizer'] == 'adam': 
+                if optim_kwargs['optim']['optimizer'] == 'adam': 
                     self.optimizer.step()
-                elif optim_kwargs['optimizer'] == 'lbfgs':
+                elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
                         lambda: self.objective(
                             criterion,
                             noisy_observation,
                             use_tv_loss,
-                            optim_kwargs['gamma'],
+                            optim_kwargs['optim']['gamma'],
                             return_output=False
                         )
                     )

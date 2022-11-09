@@ -76,7 +76,7 @@ class ParameterSampler:
             ray_trafo=ray_trafo, 
             fold='train', 
             im_size=dataset_kwargs['im_size'], 
-            length=dataset_kwargs['length'], 
+            length=dataset_kwargs['length']['train'], 
             white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
             use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
             device=self.device
@@ -86,7 +86,7 @@ class ParameterSampler:
             ray_trafo=ray_trafo, 
             fold='validation', 
             im_size=dataset_kwargs['im_size'],
-            length=dataset_kwargs['length']//10, 
+            length=dataset_kwargs['length']['validation'], 
             white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
             use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
             device=self.device
@@ -227,7 +227,7 @@ class ParameterSampler:
         self.model.load_state_dict(best_model_wts)
         
         self.writer.close()
-        if save_samples: self.add_parameters_samples()
+        if save_samples: self.save_sampled_parameters()
 
     def init_optimizer(self, optim_kwargs: Dict):
         """
@@ -300,7 +300,7 @@ class ParameterSampler:
         state_dict = torch.load(path, map_location=map_location)
         self.model.load_state_dict(state_dict)
 
-    def save_parameters_samples(self, 
+    def save_sampled_parameters(self, 
         name: str = 'parameters_samples',
         path: str = './'
         ):
@@ -309,7 +309,7 @@ class ParameterSampler:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(self.parameters_samples, path)
 
-    def load_parameter_samples(self, 
+    def load_sampled_paramters(self, 
         path_to_parameters_samples: str, 
         device = None
         ):

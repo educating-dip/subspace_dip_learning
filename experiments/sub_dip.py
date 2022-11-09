@@ -43,6 +43,39 @@ def coordinator(cfg : DictConfig) -> None:
         device=device
     )
 
+    reconstructor = SubspaceDeepImagePrior(
+        ray_trafo=ray_trafo,
+        subspace=subspace,
+        state_dict=base_reconstructor.nn_model.state_dict(),
+        torch_manual_seed=cfg.dip.torch_manual_seed,
+        device=device, 
+        net_kwargs=net_kwargs
+        )
+
+    subspace.set_paramerters_on_valset(       
+        subspace_dip=reconstructor,  
+        ray_trafo=ray_trafo,
+        dataset_kwargs={
+            'im_size': cfg.dataset.im_size,
+            'length': cfg.dataset.length.test,
+            'white_noise_rel_stddev': cfg.dataset.noise_stddev,
+            'use_fixed_seeds_starting_from': cfg.seed, 
+            },
+        optim_kwargs={
+            'epochs': cfg.subspace.set_subspace_parameters_kwargs.epochs, 
+            'batch_size': cfg.subspace.set_subspace_parameters_kwargs.batch_size,
+            'optim':{
+                'lr': cfg.subspace.set_subspace_parameters_kwargs.optim.lr,
+                'weight_decay': cfg.subspace.set_subspace_parameters_kwargs.optim.weight_decay
+                },
+            'log_path': './',
+            'torch_manual_seed': cfg.dip.torch_manual_seed
+            }
+        )
+
+    # TODO: instantiate Fisher obj.
+    # construct Fisher matrix on valset
+
     dataset = get_standard_dataset(
             cfg, 
             ray_trafo, 
@@ -50,7 +83,6 @@ def coordinator(cfg : DictConfig) -> None:
             device=device, 
         )
 
-    # within subspace optimization 
     for i, data_sample in enumerate(islice(DataLoader(dataset), cfg.num_images)):
         if i < cfg.get('skip_first_images', 0):
             continue
@@ -58,15 +90,6 @@ def coordinator(cfg : DictConfig) -> None:
         if cfg.seed is not None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
 
-        reconstructor = SubspaceDeepImagePrior(
-            ray_trafo=ray_trafo,
-            subspace=subspace,
-            state_dict=base_reconstructor.nn_model.state_dict(),
-            torch_manual_seed=cfg.dip.torch_manual_seed,
-            device=device, 
-            net_kwargs=net_kwargs
-            )
-    
         observation, ground_truth, filtbackproj = data_sample
 
         observation = observation.to(dtype=dtype, device=device)
@@ -74,22 +97,25 @@ def coordinator(cfg : DictConfig) -> None:
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         optim_kwargs = {
-            'lr': cfg.subspace.optim.lr,
-            'weight_decay': cfg.subspace.optim.weight_decay, 
-            'iterations': cfg.subspace.optim.iterations,
-            'loss_function': cfg.subspace.optim.loss_function,
-            'optimizer': cfg.subspace.optim.optimizer,
-            'gamma': cfg.subspace.optim.gamma
+            'iterations': cfg.subspace.subspace_fine_tuning_kwargs.iterations,
+            'loss_function': cfg.subspace.subspace_fine_tuning_kwargs.loss_function,
+            'optim': {
+                'lr': cfg.subspace.subspace_fine_tuning_kwargs.optim.lr,
+                'weight_decay': cfg.subspace.subspace_fine_tuning_kwargs.optim.weight_decay, 
+                'optimizer': cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer,
+                'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma
             }
+        }
 
+        subspace.init_parameters()
         recon = reconstructor.reconstruct(
-                noisy_observation=observation,
-                filtbackproj=filtbackproj,
-                ground_truth=ground_truth,
-                recon_from_randn=cfg.dip.recon_from_randn,
-                log_path=cfg.dip.log_path,
-                optim_kwargs=optim_kwargs
-            )
+            noisy_observation=observation,
+            filtbackproj=filtbackproj,
+            ground_truth=ground_truth,
+            recon_from_randn=cfg.dip.recon_from_randn,
+            log_path=cfg.dip.log_path,
+            optim_kwargs=optim_kwargs
+        )
 
         print('Subspace DIP reconstruction of sample {:d}'.format(i))
         print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))

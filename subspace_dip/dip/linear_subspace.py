@@ -1,14 +1,24 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import os
+import socket
+import datetime
+import numpy as np
 import torch
 import torch as Tensor
 import torch.nn as nn
 import tensorly as tl 
 tl.set_backend('pytorch')
+import tensorboardX
+
+from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 from .utils import gramschmidt
 from subspace_dip.utils import get_original_cwd
+from subspace_dip.data import get_ellipses_dataset
+from subspace_dip.utils import PSNR
+from subspace_dip.data import BaseRayTrafo
 
 class LinearSubspace(nn.Module):
     def __init__(self, 
@@ -27,7 +37,6 @@ class LinearSubspace(nn.Module):
         self.device = device or torch.device(
             ('cuda:0' if torch.cuda.is_available() else 'cpu')
         )
-
         if parameters_samples_list is not None: 
             self.parameters_samples_list = parameters_samples_list
             self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
@@ -36,11 +45,10 @@ class LinearSubspace(nn.Module):
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
+        self.init_parameters(use_random_init=use_random_init)
 
-        self._init_parameters(use_random_init=use_random_init)
-
-    def _init_parameters(self, 
-        use_random_init: bool = True
+    def init_parameters(self, 
+        use_random_init: bool = True, 
         ) -> None:
     
         init_parameters = torch.zeros(
@@ -52,7 +60,7 @@ class LinearSubspace(nn.Module):
             init_parameters = torch.randn_like(init_parameters)
             init_parameters /= init_parameters.pow(2).sum()
         self.parameters_vec = nn.Parameter(init_parameters)
-
+        
     def save_ortho_basis(self, 
         name: str = 'ortho_basis',
         ortho_basis_path: str = './'
@@ -114,3 +122,88 @@ class LinearSubspace(nn.Module):
         return ortho_bases.detach().to(device=device) if not return_singular_values else (
             ortho_bases.detach().to(device=device), singular_values.detach().to(device=device)
         )
+
+    def set_paramerters_on_valset(self,
+        subspace_dip,  
+        ray_trafo: BaseRayTrafo,
+        dataset_kwargs: Dict, 
+        optim_kwargs: Dict,
+        ):
+
+        current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
+        comment = 'finetune_paramerters_on_testset'
+        logdir = os.path.join(
+            optim_kwargs['log_path'],
+            current_time + '_' + socket.gethostname() + '_' + comment)
+        self.writer = tensorboardX.SummaryWriter(logdir=logdir)
+
+        if optim_kwargs['torch_manual_seed']:
+            torch.random.manual_seed(optim_kwargs['torch_manual_seed'])
+
+        # create PyTorch datasets
+        dataset_test = get_ellipses_dataset(
+            ray_trafo=ray_trafo, 
+            fold='test', 
+            im_size=dataset_kwargs['im_size'],
+            length=dataset_kwargs['length'], 
+            white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+            use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+            device=self.device
+        )
+
+        data_loaders = {
+            'test': DataLoader(
+                dataset_test,
+                batch_size=optim_kwargs['batch_size'],
+                shuffle=True
+            )
+        }
+
+        subspace_dip.nn_model.train()
+
+        criterion = torch.nn.MSELoss()
+        self.optimizer = torch.optim.Adam(
+            [self.parameters_vec],
+            lr=optim_kwargs['optim']['lr'],
+            weight_decay=optim_kwargs['optim']['weight_decay']
+            )
+                
+        running_psnr = 0.0
+        running_loss = 0.0
+        running_size = 0
+        i = 0
+        for epoch in range(optim_kwargs['epochs']):
+            # Each epoch has a training and validation phase
+                with tqdm(data_loaders['test'],
+                          desc='epoch {:d}'.format(epoch + 1) ) as pbar:
+                    for _, gt, fbp in pbar:
+
+                        fbp = fbp.to(self.device)
+                        gt = gt.to(self.device)
+
+                        # zero the parameter gradients
+                        self.optimizer.zero_grad()
+
+                        # forward
+                        outputs = subspace_dip.forward(fbp)
+                        loss = criterion(outputs, gt)
+
+                        # backward
+                        loss.backward()
+                        self.optimizer.step()
+
+                        for i in range(outputs.shape[0]):
+                            gt_ = gt[i, 0].detach().cpu().numpy()
+                            outputs_ = outputs[i, 0].detach().cpu().numpy()
+                            running_psnr += PSNR(outputs_, gt_, data_range=1)
+
+                        # statistics
+                        running_loss += loss.item() * outputs.shape[0]
+                        running_size += outputs.shape[0]
+
+                        pbar.set_postfix({'loss': running_loss/running_size,
+                                          'psnr': running_psnr/running_size})
+
+                        self.writer.add_scalar('loss', running_loss/running_size, i)
+                        self.writer.add_scalar('psnr', running_psnr/running_size, i)
+                        i += 1

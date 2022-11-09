@@ -37,7 +37,7 @@ def get_standard_dataset(cfg, ray_trafo, use_fixed_seeds_starting_from=1, device
 
         image_dataset = EllipsesDataset(
                 (cfg.dataset.im_size, cfg.dataset.im_size), 
-                length=cfg.dataset.length,
+                length=cfg.dataset.length.test,
                 )
         dataset = SimulatedDataset(
                 image_dataset, ray_trafo,

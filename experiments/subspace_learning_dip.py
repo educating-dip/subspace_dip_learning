@@ -62,7 +62,10 @@ def coordinator(cfg : DictConfig) -> None:
 
     dataset_kwargs = {
         'im_size': cfg.dataset.im_size,
-        'length': cfg.dataset.length,
+        'length':{
+            'train': cfg.dataset.length.train,
+            'validation': cfg.dataset.length.validation,
+            },
         'white_noise_rel_stddev': cfg.dataset.noise_stddev,
         'use_fixed_seeds_starting_from': cfg.seed, 
     }
