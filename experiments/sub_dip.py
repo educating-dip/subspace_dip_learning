@@ -3,9 +3,11 @@ import hydra
 from omegaconf import DictConfig
 import torch
 from torch.utils.data import DataLoader
+
+from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
 from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace
+from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfoMat
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -52,15 +54,26 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
         )
 
+    dataset_test = get_ellipses_dataset(
+        ray_trafo=ray_trafo, 
+        fold='test', 
+        im_size=cfg.dataset.im_size,
+        length=cfg.dataset.length.test, 
+        white_noise_rel_stddev=cfg.dataset.noise_stddev, 
+        use_fixed_seeds_starting_from=cfg.seed, 
+        device=device
+    )
+
+    valset = DataLoader(
+        dataset_test,
+        batch_size=cfg.subspace.fisher_info.batch_size,
+        shuffle=True
+    )
+
     subspace.set_paramerters_on_valset(       
-        subspace_dip=reconstructor,  
+        subspace_dip=reconstructor,
         ray_trafo=ray_trafo,
-        dataset_kwargs={
-            'im_size': cfg.dataset.im_size,
-            'length': cfg.dataset.length.test,
-            'white_noise_rel_stddev': cfg.dataset.noise_stddev,
-            'use_fixed_seeds_starting_from': cfg.seed, 
-            },
+        valset=valset,
         optim_kwargs={
             'epochs': cfg.subspace.set_subspace_parameters_kwargs.epochs, 
             'batch_size': cfg.subspace.set_subspace_parameters_kwargs.batch_size,
@@ -71,17 +84,21 @@ def coordinator(cfg : DictConfig) -> None:
             'log_path': './',
             'torch_manual_seed': cfg.dip.torch_manual_seed
             }
-        )
+    )
 
-    # TODO: instantiate Fisher obj.
-    # construct Fisher matrix on valset
+    fisher_matrix = FisherInfoMat(
+        subspace_dip=reconstructor,
+        valset=valset, 
+        shape=(cfg.dataset.im_size,cfg.dataset.im_size), 
+        batch_size=cfg.subspace.fisher_info.batch_size
+    )
 
     dataset = get_standard_dataset(
-            cfg, 
-            ray_trafo, 
-            use_fixed_seeds_starting_from=cfg.seed,
-            device=device, 
-        )
+        cfg,
+        ray_trafo,
+        use_fixed_seeds_starting_from=cfg.seed,
+        device=device,
+    )
 
     for i, data_sample in enumerate(islice(DataLoader(dataset), cfg.num_images)):
         if i < cfg.get('skip_first_images', 0):

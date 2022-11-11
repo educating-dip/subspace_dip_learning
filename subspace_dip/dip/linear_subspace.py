@@ -124,9 +124,9 @@ class LinearSubspace(nn.Module):
         )
 
     def set_paramerters_on_valset(self,
-        subspace_dip,  
+        subspace_dip,
         ray_trafo: BaseRayTrafo,
-        dataset_kwargs: Dict, 
+        valset: DataLoader, 
         optim_kwargs: Dict,
         ):
 
@@ -140,24 +140,6 @@ class LinearSubspace(nn.Module):
         if optim_kwargs['torch_manual_seed']:
             torch.random.manual_seed(optim_kwargs['torch_manual_seed'])
 
-        # create PyTorch datasets
-        dataset_test = get_ellipses_dataset(
-            ray_trafo=ray_trafo, 
-            fold='test', 
-            im_size=dataset_kwargs['im_size'],
-            length=dataset_kwargs['length'], 
-            white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-            use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-            device=self.device
-        )
-
-        data_loaders = {
-            'test': DataLoader(
-                dataset_test,
-                batch_size=optim_kwargs['batch_size'],
-                shuffle=True
-            )
-        }
 
         subspace_dip.nn_model.train()
 
@@ -174,19 +156,20 @@ class LinearSubspace(nn.Module):
         i = 0
         for epoch in range(optim_kwargs['epochs']):
             # Each epoch has a training and validation phase
-                with tqdm(data_loaders['test'],
-                          desc='epoch {:d}'.format(epoch + 1) ) as pbar:
-                    for _, gt, fbp in pbar:
-
-                        fbp = fbp.to(self.device)
+                with tqdm(valset,
+                        desc='epoch {:d}'.format(epoch + 1) ) as pbar:
+                    for observation, gt, fbp in pbar:
+                        
+                        observation = observation.to(self.device)
                         gt = gt.to(self.device)
+                        fbp = fbp.to(self.device)
 
                         # zero the parameter gradients
                         self.optimizer.zero_grad()
 
                         # forward
                         outputs = subspace_dip.forward(fbp)
-                        loss = criterion(outputs, gt)
+                        loss = criterion(ray_trafo(outputs), observation)
 
                         # backward
                         loss.backward()

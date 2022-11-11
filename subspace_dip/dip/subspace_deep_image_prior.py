@@ -14,7 +14,6 @@ from warnings import warn
 from torch import Tensor
 from torch.nn import MSELoss
 from tqdm import tqdm
-from torch.utils.data import DataLoader
 
 from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
 from subspace_dip.data import BaseRayTrafo
@@ -49,7 +48,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
             [param.flatten().detach() for param in self.nn_model.parameters()]
         )
 
-    def _get_func_params(self, 
+    def get_func_params(self, 
         ) -> Tuple[Tensor]:
 
         weights = self.pretrained_weights + torch.inner(
@@ -70,7 +69,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
 
     def forward(self, input: Tensor = None) -> Tensor:
         return self.func_model_with_input(
-            self._get_func_params(), self.net_input if input is None else input)
+            self.get_func_params(), self.net_input if input is None else input)
 
     def objective(self,
         criterion,

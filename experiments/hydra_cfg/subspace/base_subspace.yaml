@@ -16,3 +16,5 @@ set_subspace_parameters_kwargs:
   optim:
     lr: 1e-2
     weight_decay: 0.
+fisher_info:
+  batch_size: 1

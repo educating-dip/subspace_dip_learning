@@ -59,7 +59,7 @@ class ParameterSampler:
         ):
 
         current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-        comment = 'SubspaceConstructor_Pretraining'
+        comment = 'sample'
         logdir = os.path.join(
             optim_kwargs['log_path'],
             current_time + '_' + socket.gethostname() + '_' + comment)
@@ -260,7 +260,7 @@ class ParameterSampler:
         elif optim_kwargs['scheduler']['name'].lower() == 'onecyclelr':
             self._scheduler = OneCycleLR(
                 self.optimizer,
-                steps_per_epoch=ceil( optim_kwargs['scheduler']['train_len'] /  optim_kwargs['batch_size']),
+                steps_per_epoch=ceil( optim_kwargs['scheduler']['train_len']['train'] /  optim_kwargs['batch_size']),
                 max_lr= optim_kwargs['scheduler']['max_lr'],
                 epochs= optim_kwargs['epochs'])
         else:
