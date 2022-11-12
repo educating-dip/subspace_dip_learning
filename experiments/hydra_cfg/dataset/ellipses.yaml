@@ -1,5 +1,5 @@
 name: ellipses
-im_size: 128
+im_size: 64
 length: 
   train: 32000
   validation: 3200

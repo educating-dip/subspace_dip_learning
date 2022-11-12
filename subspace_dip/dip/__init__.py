@@ -8,4 +8,5 @@ from .network import UNet
 from .parameter_sampler import ParameterSampler
 from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfoMat
-from .utils import gramschmidt
+from .natural_gradient_optim import NGD
+from .utils import gramschmidt 

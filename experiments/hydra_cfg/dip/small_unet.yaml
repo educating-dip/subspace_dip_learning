@@ -1,6 +1,6 @@
 net:
   scales: 3
-  channels: [64, 64, 64]
+  channels: [32, 32, 32]
   skip_channels: [0, 0, 4]
   use_norm: True
   use_sigmoid: False

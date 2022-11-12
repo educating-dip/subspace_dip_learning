@@ -86,10 +86,10 @@ def coordinator(cfg : DictConfig) -> None:
             }
     )
 
-    fisher_matrix = FisherInfoMat(
+    fisher_info_matrix = FisherInfoMat(
         subspace_dip=reconstructor,
         valset=valset, 
-        shape=(cfg.dataset.im_size,cfg.dataset.im_size), 
+        im_shape=(cfg.dataset.im_size,cfg.dataset.im_size), 
         batch_size=cfg.subspace.fisher_info.batch_size
     )
 
@@ -120,7 +120,8 @@ def coordinator(cfg : DictConfig) -> None:
                 'lr': cfg.subspace.subspace_fine_tuning_kwargs.optim.lr,
                 'weight_decay': cfg.subspace.subspace_fine_tuning_kwargs.optim.weight_decay, 
                 'optimizer': cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer,
-                'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma
+                'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma,
+                'mixing_factor': cfg.subspace.subspace_fine_tuning_kwargs.optim.mixing_factor,
             }
         }
 
@@ -129,6 +130,7 @@ def coordinator(cfg : DictConfig) -> None:
             noisy_observation=observation,
             filtbackproj=filtbackproj,
             ground_truth=ground_truth,
+            fisher_info_matrix=fisher_info_matrix,
             recon_from_randn=cfg.dip.recon_from_randn,
             log_path=cfg.dip.log_path,
             optim_kwargs=optim_kwargs

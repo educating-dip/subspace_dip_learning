@@ -13,12 +13,15 @@ import tensorboardX
 from warnings import warn
 from torch import Tensor
 from torch.nn import MSELoss
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
 from subspace_dip.data import BaseRayTrafo
 from .base_dip_image_prior import BaseDeepImagePrior
 from .linear_subspace import LinearSubspace
+from .fisher_info import FisherInfoMat
+from .natural_gradient_optim import NGD
 
 class SubspaceDeepImagePrior(BaseDeepImagePrior):
 
@@ -90,7 +93,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         filtbackproj: Optional[Tensor] = None,
         ground_truth: Optional[Tensor] = None,
         recon_from_randn: bool = False,
-        use_tv_loss: bool = True,
+        use_tv_loss: bool = False,
+        fisher_info_matrix: Optional[FisherInfoMat] = None,
         log_path: str = '.',
         show_pbar: bool = True,
         optim_kwargs: Dict = None
@@ -113,6 +117,12 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
 
         if optim_kwargs['optim']['optimizer'] == 'adam':
             self.optimizer = torch.optim.Adam(
+                [self.subspace.parameters_vec],
+                lr=optim_kwargs['optim']['lr'],
+                weight_decay=optim_kwargs['optim']['weight_decay']
+                )
+        elif optim_kwargs['optim']['optimizer'] == 'ngd':
+            self.optimizer = NGD(
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay']
@@ -165,17 +175,25 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                     optim_kwargs['optim']['gamma']
                     )
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(
-                        self.nn_model.parameters(), max_norm=1
-                    )
 
                 if loss.item() < min_loss_state['loss']:
                     min_loss_state['loss'] = loss.item()
                     min_loss_state['output'] = output.detach()
                     min_loss_state['params_state_dict'] = self.subspace.state_dict()
 
-                if optim_kwargs['optim']['optimizer'] == 'adam': 
+                if optim_kwargs['optim']['optimizer'] == 'adam':
                     self.optimizer.step()
+                elif optim_kwargs['optim']['optimizer'] == 'ngd':
+                    fisher_info_matrix.update(tuneset=DataLoader(
+                        torch.utils.data.TensorDataset(
+                            noisy_observation,
+                            filtbackproj,
+                            ground_truth
+                            )
+                        ), 
+                        mixing_factor=optim_kwargs['optim']['mixing_factor']
+                    )
+                    self.optimizer.step(fisher_info_matrix=fisher_info_matrix)
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
                         lambda: self.objective(
@@ -197,7 +215,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                             min_loss_state['output'].detach().cpu(), ground_truth.cpu())
                     output_psnr = PSNR(
                             output.detach().cpu(), ground_truth.cpu())
-                    pbar.set_description(f'DIP output_psnr={output_psnr:.1f}', refresh=False)
+                    pbar.set_description(f'DIP output_psnr={output_psnr:.3f}', refresh=False)
                     writer.add_scalar('min_loss_output_psnr', min_loss_output_psnr, i)
                     writer.add_scalar('output_psnr', output_psnr, i)
 

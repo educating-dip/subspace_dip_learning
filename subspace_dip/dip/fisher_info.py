@@ -29,7 +29,9 @@ class FisherInfoMat:
         use_inverse: bool = False
         ) -> Tensor:
         
-        return self.matrix @ v if not use_inverse else torch.linalg.inv(self.matrix) @ v
+        return self.matrix @ v if not use_inverse else torch.linalg.solve(
+                self.matrix, v
+            )
     
     def compute_fisher_info(self, valset: DataLoader) -> Tensor:
         
@@ -64,15 +66,17 @@ class FisherInfoMat:
 
     def init_fisher_info_matrix(self, ) -> Tensor:
 
-        return self.compute_fisher_info(valset=self.valset)
+        return self.compute_fisher_info(
+                valset=self.valset
+            )
 
     def update(self, 
         tuneset: DataLoader, 
-        alpha: float = 0.9
+        mixing_factor: float = 0.5
         ) -> None:
         
         den = (len(self.valset) + 1)
-        self._matrix = len(self.valset) / den * self._matrix + alpha / den * self.compute_fisher_info(
+        self._matrix = len(self.valset) / den * self._matrix + mixing_factor / den * self.compute_fisher_info(
                 valset=tuneset
             )
         
