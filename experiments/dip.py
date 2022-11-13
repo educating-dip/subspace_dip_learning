@@ -1,9 +1,9 @@
 from itertools import islice
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import torch
 from torch.utils.data import DataLoader
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
 from subspace_dip.dip import DeepImagePrior
 
@@ -13,7 +13,13 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    ray_trafo = get_standard_ray_trafo(cfg)
+    ray_trafo = get_standard_ray_trafo(
+        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
+        dataset_kwargs={
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size 
+        }
+    )    
     ray_trafo.to(dtype=dtype, device=device)
 
     # data: observation, ground_truth, filtbackproj
@@ -33,14 +39,13 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
     )
 
-    dataset = get_standard_dataset(
-        cfg,
+    dataset = get_standard_test_dataset(
         ray_trafo,
+        dataset_kwargs=OmegaConf.to_object(cfg.test_dataset),
         use_fixed_seeds_starting_from=cfg.seed,
         device=device, 
     )
 
-    # within subspace optimization 
     for i, data_sample in enumerate(islice(DataLoader(dataset), cfg.num_images)):
 
         if i < cfg.get('skip_first_images', 0):

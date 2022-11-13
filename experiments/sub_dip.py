@@ -1,11 +1,11 @@
 from itertools import islice
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import torch
 from torch.utils.data import DataLoader
 
 from subspace_dip.data import get_ellipses_dataset
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_dataset
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
 from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfoMat
 
@@ -15,7 +15,15 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    ray_trafo = get_standard_ray_trafo(cfg)
+    assert cfg.test_dataset.im_size == cfg.source_dataset.im_size
+
+    ray_trafo = get_standard_ray_trafo(
+        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
+        dataset_kwargs={
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size 
+        }
+    )
     ray_trafo.to(dtype=dtype, device=device)
 
     net_kwargs = {
@@ -54,48 +62,48 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
         )
 
-    dataset_test = get_ellipses_dataset(
-        ray_trafo=ray_trafo, 
-        fold='test', 
-        im_size=cfg.dataset.im_size,
-        length=cfg.dataset.length.test, 
-        white_noise_rel_stddev=cfg.dataset.noise_stddev, 
-        use_fixed_seeds_starting_from=cfg.seed, 
-        device=device
-    )
+    fisher_info_matrix = None 
+    if cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer == 'ngd':
+        valset = DataLoader(
+            get_ellipses_dataset(
+                ray_trafo=ray_trafo, 
+                fold='test', 
+                im_size=cfg.source_dataset.im_size,
+                length=cfg.source_dataset.length.test, 
+                white_noise_rel_stddev=cfg.source_dataset.noise_stddev, 
+                use_fixed_seeds_starting_from=cfg.seed, 
+                device=device
+            ),
+            batch_size=cfg.subspace.fisher_info.batch_size,
+            shuffle=True
+        )
 
-    valset = DataLoader(
-        dataset_test,
-        batch_size=cfg.subspace.fisher_info.batch_size,
-        shuffle=True
-    )
+        subspace.set_paramerters_on_valset(       
+            subspace_dip=reconstructor,
+            ray_trafo=ray_trafo,
+            valset=valset,
+            optim_kwargs={
+                'epochs': cfg.subspace.set_subspace_parameters_kwargs.epochs, 
+                'batch_size': cfg.subspace.set_subspace_parameters_kwargs.batch_size,
+                'optim':{
+                    'lr': cfg.subspace.set_subspace_parameters_kwargs.optim.lr,
+                    'weight_decay': cfg.subspace.set_subspace_parameters_kwargs.optim.weight_decay
+                    },
+                'log_path': './',
+                'torch_manual_seed': cfg.dip.torch_manual_seed
+                }
+        )
 
-    subspace.set_paramerters_on_valset(       
-        subspace_dip=reconstructor,
-        ray_trafo=ray_trafo,
-        valset=valset,
-        optim_kwargs={
-            'epochs': cfg.subspace.set_subspace_parameters_kwargs.epochs, 
-            'batch_size': cfg.subspace.set_subspace_parameters_kwargs.batch_size,
-            'optim':{
-                'lr': cfg.subspace.set_subspace_parameters_kwargs.optim.lr,
-                'weight_decay': cfg.subspace.set_subspace_parameters_kwargs.optim.weight_decay
-                },
-            'log_path': './',
-            'torch_manual_seed': cfg.dip.torch_manual_seed
-            }
-    )
+        fisher_info_matrix = FisherInfoMat(
+            subspace_dip=reconstructor,
+            valset=valset, 
+            im_shape=(cfg.test_dataset.im_size, cfg.test_dataset.im_size), 
+            batch_size=cfg.subspace.fisher_info.batch_size
+        )
 
-    fisher_info_matrix = FisherInfoMat(
-        subspace_dip=reconstructor,
-        valset=valset, 
-        im_shape=(cfg.dataset.im_size,cfg.dataset.im_size), 
-        batch_size=cfg.subspace.fisher_info.batch_size
-    )
-
-    dataset = get_standard_dataset(
-        cfg,
+    dataset = get_standard_test_dataset(
         ray_trafo,
+        dataset_kwargs=OmegaConf.to_object(cfg.test_dataset),
         use_fixed_seeds_starting_from=cfg.seed,
         device=device,
     )
@@ -116,7 +124,7 @@ def coordinator(cfg : DictConfig) -> None:
         optim_kwargs = {
             'iterations': cfg.subspace.subspace_fine_tuning_kwargs.iterations,
             'loss_function': cfg.subspace.subspace_fine_tuning_kwargs.loss_function,
-            'optim': {
+            'optim':{
                 'lr': cfg.subspace.subspace_fine_tuning_kwargs.optim.lr,
                 'weight_decay': cfg.subspace.subspace_fine_tuning_kwargs.optim.weight_decay, 
                 'optimizer': cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer,

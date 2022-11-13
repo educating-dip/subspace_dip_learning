@@ -1,5 +1,5 @@
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import torch
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo
 from subspace_dip.dip import DeepImagePrior, ParameterSampler, LinearSubspace
@@ -10,7 +10,13 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    ray_trafo = get_standard_ray_trafo(cfg)
+    ray_trafo = get_standard_ray_trafo(
+        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
+        dataset_kwargs={
+            'name': cfg.source_dataset.name,
+            'im_size': cfg.source_dataset.im_size 
+        }
+    )    
     ray_trafo.to(dtype=dtype, device=device)
 
     net_kwargs = {
@@ -54,19 +60,19 @@ def coordinator(cfg : DictConfig) -> None:
         },
         'scheduler': {
             'name': cfg.sampler.training.optim.scheduler_name,
-            'train_len': cfg.dataset.length,
+            'train_len': cfg.source_dataset.length,
             'lr_min': cfg.sampler.training.optim.lr_min,
             'max_lr': cfg.sampler.training.optim.max_lr
         }
     }
 
     dataset_kwargs = {
-        'im_size': cfg.dataset.im_size,
+        'im_size': cfg.source_dataset.im_size,
         'length':{
-            'train': cfg.dataset.length.train,
-            'validation': cfg.dataset.length.validation,
+            'train': cfg.source_dataset.length.train,
+            'validation': cfg.source_dataset.length.validation,
             },
-        'white_noise_rel_stddev': cfg.dataset.noise_stddev,
+        'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
         'use_fixed_seeds_starting_from': cfg.seed, 
     }
 

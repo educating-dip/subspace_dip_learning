@@ -1,5 +1,5 @@
 name: rectangles
-im_size: 128
+im_size: 64
 num_rects: 5
 num_angle_modes: 10
 angle_modes_sigma: 0.05
