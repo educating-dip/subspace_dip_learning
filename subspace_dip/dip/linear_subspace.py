@@ -57,8 +57,11 @@ class LinearSubspace(nn.Module):
             device=self.device
             )
         if use_random_init: 
-            init_parameters = torch.randn_like(init_parameters)
-            init_parameters /= init_parameters.pow(2).sum()
+            init_parameters = torch.randn_like(
+                init_parameters, 
+                requires_grad=True
+            )
+            init_parameters = init_parameters / init_parameters.pow(2).sum()
         self.parameters_vec = nn.Parameter(init_parameters)
         
     def save_ortho_basis(self, 
@@ -168,7 +171,7 @@ class LinearSubspace(nn.Module):
                         self.optimizer.zero_grad()
 
                         # forward
-                        outputs = subspace_dip.forward(fbp)
+                        outputs = subspace_dip(input=fbp)
                         loss = criterion(ray_trafo(outputs), observation)
 
                         # backward

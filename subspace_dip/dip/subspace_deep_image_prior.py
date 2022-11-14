@@ -8,6 +8,7 @@ import datetime
 import torch
 import numpy as np
 import functorch as ftch
+import torch.nn as nn
 import tensorboardX
 
 from warnings import warn
@@ -23,7 +24,7 @@ from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfoMat
 from .natural_gradient_optim import NGD
 
-class SubspaceDeepImagePrior(BaseDeepImagePrior):
+class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
     def __init__(self,
         subspace: LinearSubspace,
@@ -34,12 +35,13 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         net_kwargs=None
         ):
 
-        super().__init__(
+        nn.Module.__init__(self, )
+        BaseDeepImagePrior.__init__(self, 
             ray_trafo=ray_trafo,
             torch_manual_seed=torch_manual_seed,
             device=device,
             net_kwargs=net_kwargs
-            )
+        )
         
         self.subspace = subspace
         if state_dict is not None: 
@@ -52,10 +54,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         )
 
     def get_func_params(self, 
+            parameters_vec: Optional[Tensor] = None,
         ) -> Tuple[Tensor]:
 
         weights = self.pretrained_weights + torch.inner(
-            self.subspace.parameters_vec, self.subspace.ortho_basis
+            self.subspace.parameters_vec if parameters_vec is None else parameters_vec, self.subspace.ortho_basis
             )
         cnt = 0
         func_weights = []
@@ -70,9 +73,17 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
         for params in self.nn_model.parameters():
             params.requires_grad_(set_require_grad)
 
-    def forward(self, input: Tensor = None) -> Tensor:
+    def forward(self, 
+            parameters_vec: Optional[Tensor] = None, 
+            input: Optional[Tensor] = None
+        ) -> Tensor:
+
         return self.func_model_with_input(
-            self.get_func_params(), self.net_input if input is None else input)
+                self.get_func_params(
+                    parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec
+                        ), 
+                self.net_input if input is None else input
+            )
 
     def objective(self,
         criterion,
@@ -190,8 +201,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior):
                             filtbackproj,
                             ground_truth
                             )
-                        ), 
-                        mixing_factor=optim_kwargs['optim']['mixing_factor']
+                        ),
+                        mixing_factor=optim_kwargs['optim']['mixing_factor'], 
+                        damping_factor=optim_kwargs['optim']['damping_factor']
                     )
                     self.optimizer.step(fisher_info_matrix=fisher_info_matrix)
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':

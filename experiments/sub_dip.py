@@ -97,8 +97,8 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info_matrix = FisherInfoMat(
             subspace_dip=reconstructor,
             valset=valset, 
-            im_shape=(cfg.test_dataset.im_size, cfg.test_dataset.im_size), 
-            batch_size=cfg.subspace.fisher_info.batch_size
+            batch_size=cfg.subspace.fisher_info.batch_size, 
+            damping_factor=cfg.subspace.fisher_info.damping_factor
         )
 
     dataset = get_standard_test_dataset(
@@ -129,7 +129,8 @@ def coordinator(cfg : DictConfig) -> None:
                 'weight_decay': cfg.subspace.subspace_fine_tuning_kwargs.optim.weight_decay, 
                 'optimizer': cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer,
                 'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma,
-                'mixing_factor': cfg.subspace.subspace_fine_tuning_kwargs.optim.mixing_factor,
+                'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
+                'damping_factor': cfg.subspace.fisher_info.damping_factor,
             }
         }
 
