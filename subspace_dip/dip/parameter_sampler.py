@@ -51,6 +51,36 @@ class ParameterSampler:
             parameter_vec if not use_cpu else parameter_vec.cpu()
         )
     
+    def create_sampling_sequence(self, 
+        burn_in: int, 
+        num_overall_updates : int, 
+        num_samples : int, 
+        sampling_strategy : str = 'linear'
+        ):
+        if isinstance(sampling_strategy, str) == False or sampling_strategy not in ['linear', 'random', 'power']:
+            import warnings.warn as warn
+            warn('sampling strategy not recognised. defaulting to linear')
+            sampling_strategy = 'linear'
+
+        if sampling_strategy == 'linear':
+            self.sampling_sequence =  np.linspace(
+                burn_in,
+                num_overall_updates,
+                num_samples + 1,
+                dtype=int
+                )
+        elif sampling_strategy == 'random':
+            self.sampling_sequence = np.random.randint(
+                burn_in, 
+                num_overall_updates, 
+                size = num_samples + 1, 
+                dtype = int
+                )
+        elif sampling_strategy == 'power':
+            self.sampling_sequence = np.floor(
+                [burn_in + (num_overall_updates-burn_in)* (k / num_samples) ** 0.6 for k in range(num_samples+1)]
+                ).astype(int)
+
     def sample(self, 
         ray_trafo : BaseRayTrafo,
         dataset_kwargs : Dict, 
@@ -112,12 +142,7 @@ class ParameterSampler:
             dataset_sizes['train'] / optim_kwargs['batch_size']
             ) * optim_kwargs['epochs']
 
-        sample_idx_sequence = np.linspace(
-            optim_kwargs['burn_in'],
-            num_overall_updates,
-            optim_kwargs['num_samples'] + 1,
-            dtype=int
-            )
+        self.create_sampling_sequence(optim_kwargs['burn_in'], num_overall_updates, optim_kwargs['num_samples'] + 1, optim_kwargs['sampling_strategy'])
 
         self.init_scheduler(optim_kwargs=optim_kwargs)
         if self._scheduler is not None:
@@ -165,7 +190,7 @@ class ParameterSampler:
                                     self.model.parameters(), max_norm=1)
                                 self._optimizer.step()
 
-                                if num_grad_updates in sample_idx_sequence:
+                                if num_grad_updates in self.sampling_sequence:
                                     self.add_parameters_samples()
 
                                 if (self._scheduler is not None and

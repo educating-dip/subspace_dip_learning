@@ -53,6 +53,7 @@ def coordinator(cfg : DictConfig) -> None:
         'epochs': cfg.sampler.training.num_epochs,
         'num_samples': cfg.sampler.sampling.num_samples,
         'burn_in': cfg.sampler.sampling.burn_in,
+        'sampling_strategy': cfg.sampler.sampling.sampling_strategy,
         'batch_size': cfg.sampler.training.batch_size,
         'optimizer': {
             'lr': cfg.sampler.training.optim.lr,
