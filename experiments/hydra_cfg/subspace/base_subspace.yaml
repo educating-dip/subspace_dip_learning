@@ -7,10 +7,9 @@ subspace_fine_tuning_kwargs:
   loss_function: mse
   optim:
     optimizer: ngd
-    lr: 1e-3
+    lr: 5e-4
     weight_decay: 0.
     gamma: 1e-4
-    mixing_factor: 0.4
 set_subspace_parameters_kwargs:
   epochs: 5
   batch_size: 16
@@ -19,3 +18,5 @@ set_subspace_parameters_kwargs:
     weight_decay: 0.
 fisher_info:
   batch_size: 8
+  mixing_factor: 0.4
+  damping_factor: 1e-3
