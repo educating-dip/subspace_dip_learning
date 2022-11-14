@@ -70,7 +70,10 @@ class FisherInfoMat:
                     per_inputs_jac, 
                     per_inputs_jac), 
                         dim=0) / len(valset)            
-            return self._add_damping(matrix=fisher_info_mat, damping_factor=damping_factor) 
+            return self._add_damping(
+                matrix=fisher_info_mat,
+                damping_factor=damping_factor
+            ) 
 
     def init_fisher_info_matrix(self, valset: DataLoader, damping_factor: float = 1e-3) -> Tensor:
 
