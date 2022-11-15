@@ -1,3 +1,4 @@
+from typing import Optional, Sequence
 import torch
 import numpy as np
 
@@ -15,7 +16,6 @@ class FisherInfoMat:
         ):
 
         self.subspace_dip = subspace_dip
-        self.num_subspace_params = len(self.subspace_dip.subspace.parameters_vec)
         self.batch_size = batch_size
         self.num_inputs_valset = len(valset)
         self.matrix = self.init_fisher_info_matrix(
@@ -41,13 +41,15 @@ class FisherInfoMat:
 
     def compute_fisher_info_matrix(self, 
             valset: DataLoader, 
-            damping_factor: float
+            damping_factor: float,
+            slicing_sequence: Optional[Sequence] = None
         ) -> Tensor:
         
         def _fnet_single(params: Tensor, x):
             out = self.subspace_dip.forward(
                     parameters_vec=params, 
-                    input=x.unsqueeze(0)
+                    input=x.unsqueeze(0),
+                    slicing_sequence=slicing_sequence
                 ).squeeze(0)
             return out
 
@@ -60,7 +62,7 @@ class FisherInfoMat:
                     )                
                 jac = torch.cat([j.flatten() for j in jac]).view(
                         self.batch_size,
-                        -1, self.num_subspace_params
+                        -1, self.subspace_dip.subspace.num_subspace_params
                     ) # the inferred dim is im_shape: nn_model_output
                 per_inputs_jac_list.append(jac)
             per_inputs_jac = torch.cat(per_inputs_jac_list)
@@ -85,12 +87,13 @@ class FisherInfoMat:
     def update(self, 
         tuneset: DataLoader, 
         mixing_factor: float = 0.5,
-        damping_factor: float = 1e-3
+        damping_factor: float = 1e-3,
+        slicing_sequence: Optional[Sequence] = None
         ) -> None:
         
         den = (self.num_inputs_valset + 1)
         self.matrix =  self.num_inputs_valset / den * self.matrix + mixing_factor / den * self.compute_fisher_info_matrix(
                 valset=tuneset, 
-                damping_factor=damping_factor
+                damping_factor=damping_factor,
+                slicing_sequence=slicing_sequence
             )
-        

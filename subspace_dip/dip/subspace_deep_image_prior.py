@@ -1,7 +1,7 @@
 """
 Provides :class:`SubspaceDeepImagePrior`.
 """
-from typing import Optional, Union, Tuple, Dict
+from typing import Optional, Union, Tuple, Dict, List, Sequence
 import os
 import socket
 import datetime
@@ -32,7 +32,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         state_dict: Optional[None] = None, 
         torch_manual_seed: Union[int, None] = 1,
         device=None,
-        net_kwargs=None
+        net_kwargs=None,
         ):
 
         nn.Module.__init__(self, )
@@ -55,11 +55,17 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
     def get_func_params(self, 
             parameters_vec: Optional[Tensor] = None,
+            slicing_sequence: Optional[Sequence] = None, 
         ) -> Tuple[Tensor]:
 
-        weights = self.pretrained_weights + torch.inner(
-            self.subspace.parameters_vec if parameters_vec is None else parameters_vec, self.subspace.ortho_basis
-            )
+        if slicing_sequence is None:
+            weights = self.pretrained_weights + torch.inner(
+                    self.subspace.parameters_vec if parameters_vec is None else parameters_vec, self.subspace.ortho_basis
+                    )
+        else:
+            weights = self.pretrained_weights + torch.inner(
+                    self.subspace.parameters_vec[slicing_sequence] if parameters_vec is None else parameters_vec[slicing_sequence], self.subspace.ortho_basis[:, slicing_sequence]
+                    )
         cnt = 0
         func_weights = []
         for params in self.nn_model.parameters():
@@ -75,25 +81,28 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
     def forward(self, 
             parameters_vec: Optional[Tensor] = None, 
-            input: Optional[Tensor] = None
+            input: Optional[Tensor] = None, 
+            slicing_sequence: Optional[Sequence] = None
         ) -> Tensor:
 
         return self.func_model_with_input(
                 self.get_func_params(
-                    parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec
+                    parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
+                    slicing_sequence=slicing_sequence
                         ), 
                 self.net_input if input is None else input
             )
 
     def objective(self,
         criterion,
-        noisy_observation,
-        use_tv_loss,
-        gamma, 
-        return_output: bool = True
+        noisy_observation: Tensor,
+        use_tv_loss: Optional[bool] = None,
+        slicing_sequence: Optional[Sequence] = None,
+        gamma: Optional[float] = None, 
+        return_output: Optional[bool] = True
         ):
 
-        output = self.forward() 
+        output = self.forward(slicing_sequence=slicing_sequence) 
         loss = criterion(self.ray_trafo(output), noisy_observation)
         if use_tv_loss:
             loss = loss + gamma*tv_loss(output)
@@ -166,6 +175,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             writer.add_image('filtbackproj', normalize(
                 filtbackproj[0, ...]).cpu().numpy(), 0)
 
+        if optim_kwargs['optim']['use_subsampling_orthospace']:
+            self.singular_probabilities = self.subspace.singular_values / torch.sum(self.subspace.singular_values)
+
         writer.add_image('base_recon', normalize(
                self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
         
@@ -178,11 +190,20 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             ) as pbar:
 
             for i in pbar:
+                slicing_sequence = None
+                if optim_kwargs['optim']['use_subsampling_orthospace']:
+                    slicing_sequence = np.random.choice(range(
+                        self.subspace.num_subspace_params), 
+                        size=optim_kwargs['optim']['subsampling_orthospace_dim'],
+                        replace=False, 
+                        p=self.singular_probabilities.cpu().numpy()
+                    )
                 self.optimizer.zero_grad()
                 loss, output = self.objective(
                     criterion,
                     noisy_observation,
                     use_tv_loss,
+                    slicing_sequence,
                     optim_kwargs['optim']['gamma']
                     )
                 loss.backward()
@@ -203,7 +224,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                             )
                         ),
                         mixing_factor=optim_kwargs['optim']['mixing_factor'], 
-                        damping_factor=optim_kwargs['optim']['damping_factor']
+                        damping_factor=optim_kwargs['optim']['damping_factor'],
+                        slicing_sequence=slicing_sequence
                     )
                     self.optimizer.step(fisher_info_matrix=fisher_info_matrix)
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':

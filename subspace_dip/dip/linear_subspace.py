@@ -45,7 +45,9 @@ class LinearSubspace(nn.Module):
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
+            #TODO: load singular values
         self.init_parameters(use_random_init=use_random_init)
+        self.num_subspace_params = len(self.parameters_vec)
 
     def init_parameters(self, 
         use_random_init: bool = True, 
@@ -71,7 +73,7 @@ class LinearSubspace(nn.Module):
 
         path = ortho_basis_path if ortho_basis_path.endswith('.pt') else ortho_basis_path + name + '.pt'
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        torch.save(self.ortho_basis, path)
+        torch.save({'ortho_basis': self.ortho_basis, 'singular_values' : self.singular_values}, path)
 
     def load_ortho_basis(self, 
         ortho_basis_path: str, 
@@ -80,7 +82,8 @@ class LinearSubspace(nn.Module):
         path = os.path.join(get_original_cwd(), 
             ortho_basis_path if ortho_basis_path.endswith('.pt') \
                 else ortho_basis_path + '.pt')
-        self.ortho_basis = torch.load(path, map_location=self.device)
+        self.ortho_basis = torch.load(path, map_location=self.device)['ortho_basis']
+        self.singular_values = torch.load(path, map_location=self.device)['singular_values']
 
     def extract_ortho_basis_subspace(self,
         subspace_dim: Optional[int] = None,
@@ -126,7 +129,7 @@ class LinearSubspace(nn.Module):
             ortho_bases.detach().to(device=device), singular_values.detach().to(device=device)
         )
 
-    def set_paramerters_on_valset(self,
+    def set_parameters_on_valset(self,
         subspace_dip,
         ray_trafo: BaseRayTrafo,
         valset: DataLoader, 

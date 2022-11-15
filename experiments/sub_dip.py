@@ -78,7 +78,7 @@ def coordinator(cfg : DictConfig) -> None:
             shuffle=True
         )
 
-        subspace.set_paramerters_on_valset(       
+        subspace.set_parameters_on_valset(       
             subspace_dip=reconstructor,
             ray_trafo=ray_trafo,
             valset=valset,
@@ -131,6 +131,8 @@ def coordinator(cfg : DictConfig) -> None:
                 'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma,
                 'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
                 'damping_factor': cfg.subspace.fisher_info.damping_factor,
+                'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
+                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim          
             }
         }
 
