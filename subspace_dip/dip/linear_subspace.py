@@ -45,7 +45,7 @@ class LinearSubspace(nn.Module):
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
-            #TODO: load singular values
+
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
 

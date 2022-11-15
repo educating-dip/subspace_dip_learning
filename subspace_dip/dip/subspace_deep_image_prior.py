@@ -1,7 +1,7 @@
 """
 Provides :class:`SubspaceDeepImagePrior`.
 """
-from typing import Optional, Union, Tuple, Dict, List, Sequence
+from typing import Optional, Union, Tuple, Dict, Sequence
 import os
 import socket
 import datetime
