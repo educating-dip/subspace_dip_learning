@@ -5,7 +5,7 @@ subsampling_orthospace:
 num_random_projs: null
 use_random_init: True
 ortho_basis_path: ./
-subspace_fine_tuning_kwargs:
+fine_tuning:
   iterations: 10000
   loss_function: mse
   optim:
@@ -13,13 +13,15 @@ subspace_fine_tuning_kwargs:
     lr: 5e-4
     weight_decay: 0.
     gamma: 1e-4
-set_subspace_parameters_kwargs:
-  epochs: 5
-  batch_size: 16
-  optim:
-    lr: 1e-2
-    weight_decay: 0.
 fisher_info:
   batch_size: 8
-  mixing_factor: 0.4
+  mixing_factor: 0.5
   damping_factor: 1e-3
+  mode: full
+  use_init_fisher_info_matrix: True
+  init_fisher_info_matrix:
+    epochs: 5
+    batch_size: 16
+    optim:
+      lr: 1e-3
+      weight_decay: 0.

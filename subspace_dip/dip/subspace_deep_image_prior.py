@@ -21,7 +21,7 @@ from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
 from subspace_dip.data import BaseRayTrafo
 from .base_dip_image_prior import BaseDeepImagePrior
 from .linear_subspace import LinearSubspace
-from .fisher_info import FisherInfoMat
+from .fisher_info import FisherInfo
 from .natural_gradient_optim import NGD
 
 class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
@@ -58,13 +58,16 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             slicing_sequence: Optional[Sequence] = None, 
         ) -> Tuple[Tensor]:
 
+        weights = self.pretrained_weights
         if slicing_sequence is None:
-            weights = self.pretrained_weights + torch.inner(
-                    self.subspace.parameters_vec if parameters_vec is None else parameters_vec, self.subspace.ortho_basis
+            weights = weights + torch.inner(
+                    self.subspace.parameters_vec if parameters_vec is None \
+                        else parameters_vec, self.subspace.ortho_basis
                     )
         else:
-            weights = self.pretrained_weights + torch.inner(
-                    self.subspace.parameters_vec[slicing_sequence] if parameters_vec is None else parameters_vec[slicing_sequence], self.subspace.ortho_basis[:, slicing_sequence]
+            weights = weights + torch.inner(
+                    self.subspace.parameters_vec[slicing_sequence] if parameters_vec is None \
+                        else parameters_vec[slicing_sequence], self.subspace.ortho_basis[:, slicing_sequence]
                     )
         cnt = 0
         func_weights = []
@@ -82,27 +85,34 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
     def forward(self, 
             parameters_vec: Optional[Tensor] = None, 
             input: Optional[Tensor] = None, 
-            slicing_sequence: Optional[Sequence] = None
+            slicing_sequence: Optional[Sequence] = None, 
+            use_forward_op: bool = True
         ) -> Tensor:
 
-        return self.func_model_with_input(
+        out = self.func_model_with_input(
                 self.get_func_params(
                     parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
                     slicing_sequence=slicing_sequence
                         ), 
                 self.net_input if input is None else input
             )
+        return out if not use_forward_op else self.ray_trafo(out)
 
     def objective(self,
         criterion,
         noisy_observation: Tensor,
         use_tv_loss: Optional[bool] = None,
         slicing_sequence: Optional[Sequence] = None,
+        use_forward_op: bool = False,
         gamma: Optional[float] = None, 
         return_output: Optional[bool] = True
         ):
 
-        output = self.forward(slicing_sequence=slicing_sequence) 
+        output = self.forward(
+                slicing_sequence=slicing_sequence,
+                use_forward_op=use_forward_op
+            )
+
         loss = criterion(self.ray_trafo(output), noisy_observation)
         if use_tv_loss:
             loss = loss + gamma*tv_loss(output)
@@ -114,7 +124,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         ground_truth: Optional[Tensor] = None,
         recon_from_randn: bool = False,
         use_tv_loss: bool = False,
-        fisher_info_matrix: Optional[FisherInfoMat] = None,
+        fisher_info: Optional[FisherInfo] = None,
         log_path: str = '.',
         show_pbar: bool = True,
         optim_kwargs: Dict = None
@@ -200,11 +210,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     )
                 self.optimizer.zero_grad()
                 loss, output = self.objective(
-                    criterion,
-                    noisy_observation,
-                    use_tv_loss,
-                    slicing_sequence,
-                    optim_kwargs['optim']['gamma']
+                    criterion=criterion,
+                    noisy_observation=noisy_observation,
+                    use_tv_loss=use_tv_loss,
+                    slicing_sequence=slicing_sequence,
+                    gamma=optim_kwargs['optim']['gamma']
                     )
                 loss.backward()
 
@@ -216,25 +226,28 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 if optim_kwargs['optim']['optimizer'] == 'adam':
                     self.optimizer.step()
                 elif optim_kwargs['optim']['optimizer'] == 'ngd':
-                    fisher_info_matrix.update(tuneset=DataLoader(
-                        torch.utils.data.TensorDataset(
-                            noisy_observation,
-                            filtbackproj,
-                            ground_truth
-                            )
-                        ),
+                    fisher_info.update(tuneset=DataLoader(
+                            torch.utils.data.TensorDataset(
+                                noisy_observation,
+                                filtbackproj,
+                                ground_truth
+                                )
+                            ),
                         mixing_factor=optim_kwargs['optim']['mixing_factor'], 
                         damping_factor=optim_kwargs['optim']['damping_factor'],
-                        slicing_sequence=slicing_sequence
+                        use_forward_op=True,
+                        mode=optim_kwargs['optim']['mode']
                     )
-                    self.optimizer.step(fisher_info_matrix=fisher_info_matrix)
+                    self.optimizer.step(
+                            fisher_info=fisher_info, 
+                        )
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
                         lambda: self.objective(
-                            criterion,
-                            noisy_observation,
-                            use_tv_loss,
-                            optim_kwargs['optim']['gamma'],
+                            criterion=criterion,
+                            noisy_observation=noisy_observation,
+                            use_tv_loss=use_tv_loss,
+                            gamma=optim_kwargs['optim']['gamma'],
                             return_output=False
                         )
                     )

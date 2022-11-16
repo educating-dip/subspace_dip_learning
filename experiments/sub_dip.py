@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfoMat
+from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfo
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -62,8 +62,8 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
         )
 
-    fisher_info_matrix = None 
-    if cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer == 'ngd':
+    fisher_info = None 
+    if (cfg.subspace.fine_tuning.optim.optimizer == 'ngd') and cfg.subspace.fisher_info.use_init_fisher_info_matrix:
         valset = DataLoader(
             get_ellipses_dataset(
                 ray_trafo=ray_trafo, 
@@ -83,18 +83,18 @@ def coordinator(cfg : DictConfig) -> None:
             ray_trafo=ray_trafo,
             valset=valset,
             optim_kwargs={
-                'epochs': cfg.subspace.set_subspace_parameters_kwargs.epochs, 
-                'batch_size': cfg.subspace.set_subspace_parameters_kwargs.batch_size,
+                'epochs': cfg.subspace.fisher_info.init_fisher_info_matrix.epochs, 
+                'batch_size': cfg.subspace.fisher_info.init_fisher_info_matrix.batch_size,
                 'optim':{
-                    'lr': cfg.subspace.set_subspace_parameters_kwargs.optim.lr,
-                    'weight_decay': cfg.subspace.set_subspace_parameters_kwargs.optim.weight_decay
+                    'lr': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.lr,
+                    'weight_decay': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay
                     },
                 'log_path': './',
                 'torch_manual_seed': cfg.dip.torch_manual_seed
                 }
         )
 
-        fisher_info_matrix = FisherInfoMat(
+        fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             valset=valset, 
             batch_size=cfg.subspace.fisher_info.batch_size, 
@@ -122,17 +122,18 @@ def coordinator(cfg : DictConfig) -> None:
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         optim_kwargs = {
-            'iterations': cfg.subspace.subspace_fine_tuning_kwargs.iterations,
-            'loss_function': cfg.subspace.subspace_fine_tuning_kwargs.loss_function,
+            'iterations': cfg.subspace.fine_tuning.iterations,
+            'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
-                'lr': cfg.subspace.subspace_fine_tuning_kwargs.optim.lr,
-                'weight_decay': cfg.subspace.subspace_fine_tuning_kwargs.optim.weight_decay, 
-                'optimizer': cfg.subspace.subspace_fine_tuning_kwargs.optim.optimizer,
-                'gamma': cfg.subspace.subspace_fine_tuning_kwargs.optim.gamma,
+                'lr': cfg.subspace.fine_tuning.optim.lr,
+                'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay, 
+                'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
+                'gamma': cfg.subspace.fine_tuning.optim.gamma,
                 'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
                 'damping_factor': cfg.subspace.fisher_info.damping_factor,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
-                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim          
+                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim,
+                'mode': cfg.subspace.fisher_info.mode
             }
         }
 
@@ -141,7 +142,7 @@ def coordinator(cfg : DictConfig) -> None:
             noisy_observation=observation,
             filtbackproj=filtbackproj,
             ground_truth=ground_truth,
-            fisher_info_matrix=fisher_info_matrix,
+            fisher_info=fisher_info,
             recon_from_randn=cfg.dip.recon_from_randn,
             log_path=cfg.dip.log_path,
             optim_kwargs=optim_kwargs

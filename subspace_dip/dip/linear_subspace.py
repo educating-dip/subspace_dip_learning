@@ -174,7 +174,10 @@ class LinearSubspace(nn.Module):
                         self.optimizer.zero_grad()
 
                         # forward
-                        outputs = subspace_dip(input=fbp)
+                        outputs = subspace_dip(
+                                input=fbp, 
+                                use_forward_op=False
+                            )
                         loss = criterion(ray_trafo(outputs), observation)
 
                         # backward

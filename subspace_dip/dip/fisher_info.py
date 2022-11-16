@@ -1,18 +1,21 @@
-from typing import Optional, Sequence
+from typing import Tuple
+
+import numpy as np
 import torch
 import numpy as np
+from functools import partial
 
 from torch import Tensor
-from functorch import vmap, jacrev
+from functorch import vmap, jacrev, vjp
 from torch.utils.data import DataLoader
 
-class FisherInfoMat:
+class FisherInfo:
 
     def __init__(self, 
-        subspace_dip,
-        valset: DataLoader, 
-        batch_size: int = 1, 
-        damping_factor: float = 1e-3
+            subspace_dip,
+            valset: DataLoader, 
+            batch_size: int = 1, 
+            damping_factor: float = 1e-3
         ):
 
         self.subspace_dip = subspace_dip
@@ -21,15 +24,20 @@ class FisherInfoMat:
         self.matrix = self.init_fisher_info_matrix(
             valset=valset, damping_factor=damping_factor
         )
-    
-    def fvp(self, 
-        v: Tensor,
-        use_inverse: bool = False
+
+    @property
+    def shape(self, 
+            ) -> Tuple[int,int]:
+
+        size = self.matrix.shape[0]
+        return (size, size)
+ 
+    def Fvp(self, 
+            v: Tensor,
+            use_inverse: bool = False
         ) -> Tensor:
 
-        return self.matrix @ v if not use_inverse else torch.linalg.solve(
-                self.matrix, v
-            )
+        return self.matrix @ v if not use_inverse else torch.linalg.solve(self.matrix, v)
     
     def _add_damping(self,  
             matrix: Tensor, 
@@ -39,28 +47,37 @@ class FisherInfoMat:
         matrix[np.diag_indices(matrix.shape[0])] += damping_factor
         return matrix
 
-    def compute_fisher_info_matrix(self, 
-            valset: DataLoader, 
-            damping_factor: float,
-            slicing_sequence: Optional[Sequence] = None
+    def _fnet_single(self,
+            parameters_vec: Tensor,
+            input: Tensor,
+            use_forward_op: bool = True
         ) -> Tensor:
-        
-        def _fnet_single(params: Tensor, x):
-            out = self.subspace_dip.forward(
-                    parameters_vec=params, 
-                    input=x.unsqueeze(0),
-                    slicing_sequence=slicing_sequence
-                ).squeeze(0)
-            return out
+
+        out = self.subspace_dip.forward(
+                parameters_vec=parameters_vec,
+                input=input,
+                **{'use_forward_op':use_forward_op}
+            )
+        return out
+
+    def assemble_fisher_info_matrix(self, 
+            valset: DataLoader,
+            damping_factor: float,
+            use_forward_op: bool = True
+        ) -> Tensor:
+    
+        _fnet_single = partial(self._fnet_single,
+                use_forward_op=use_forward_op
+            )
 
         with torch.no_grad():
             per_inputs_jac_list = []
             for _, _, fbp in valset:
                 jac = vmap(
-                    jacrev(_fnet_single), (None, 0))(
-                        self.subspace_dip.subspace.parameters_vec, fbp
-                    )                
-                jac = torch.cat([j.flatten() for j in jac]).view(
+                    jacrev(_fnet_single), in_dims=(None, 0))(
+                        self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1)
+                    )
+                jac = jac.view(
                         self.batch_size,
                         -1, self.subspace_dip.subspace.num_subspace_params
                     ) # the inferred dim is im_shape: nn_model_output
@@ -70,30 +87,77 @@ class FisherInfoMat:
                 torch.einsum(
                     'Nop,Noc->Npc',
                     per_inputs_jac, 
-                    per_inputs_jac), 
-                        dim=0) / len(valset)            
+                    per_inputs_jac),
+                        dim=0)
+     
             return self._add_damping(
                 matrix=fisher_info_mat,
                 damping_factor=damping_factor
             ) 
 
-    def init_fisher_info_matrix(self, valset: DataLoader, damping_factor: float = 1e-3) -> Tensor:
+    def init_fisher_info_matrix(self,
+            valset: DataLoader,
+            damping_factor: float = 1e-3,
+            use_forward_op: bool = True, 
+        ) -> Tensor:
 
-        return self.compute_fisher_info_matrix(
+        return self.assemble_fisher_info_matrix(
                 valset=valset, 
-                damping_factor=damping_factor
+                damping_factor=damping_factor,
+                use_forward_op=use_forward_op
             )
 
-    def update(self, 
-        tuneset: DataLoader, 
-        mixing_factor: float = 0.5,
-        damping_factor: float = 1e-3,
-        slicing_sequence: Optional[Sequence] = None
+    def randm_rank_one_update(self,
+        tuneset: DataLoader,
+        batch_size: int = 10,
+        use_forward_op: bool = True
+        ) -> Tensor:
+        
+        v = torch.zeros(
+            (batch_size, )
+                ).to(device=self.subspace_dip.device)
+        mask = list(np.random.choice(self.shape[0], batch_size, replace=False))
+        v[list(range(batch_size)), mask] = 1.
+
+        _, _, fbp = next(iter(tuneset))
+
+        _fnet_single = partial(self._fnet_single,
+            input=fbp, 
+            use_forward_op=use_forward_op
+        )
+        with torch.no_grad():
+            def _single_jvp(v):
+                _, _jvp_fn = vjp(
+                        _fnet_single, 
+                        (self.subspace_dip.subspace.parameters_vec,), 
+                        (v,)
+                    )
+                return _jvp_fn
+
+            Jvp = vmap(_single_jvp, in_dims=0)(v) # .squeeze(dim=1).squeeze(dim=1)
+            update = torch.mean(torch.einsum('Npo,Nco->Npc', Jvp, Jvp), dim=0)
+        return update
+
+    def update(self,
+            tuneset: DataLoader,
+            mixing_factor: float = 0.5,
+            damping_factor: float = 1e-3,
+            use_forward_op: bool = True,
+            mode: str = 'full'
         ) -> None:
         
-        den = (self.num_inputs_valset + 1)
-        self.matrix =  self.num_inputs_valset / den * self.matrix + mixing_factor / den * self.compute_fisher_info_matrix(
+        if mode == 'full': 
+            update = self.assemble_fisher_info_matrix(
                 valset=tuneset, 
                 damping_factor=damping_factor,
-                slicing_sequence=slicing_sequence
+                use_forward_op=use_forward_op
             )
+        elif mode == 'jvp_rank_one':
+            update = self.randm_rank_one_update(
+                tuneset=tuneset, 
+            )
+        
+        else: 
+            raise NotImplementedError
+
+        self.matrix = mixing_factor * self.matrix + (1. - mixing_factor) * update

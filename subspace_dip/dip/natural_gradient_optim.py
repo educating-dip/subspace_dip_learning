@@ -3,7 +3,7 @@ from torch import Tensor
 from torch.optim import Optimizer
 from typing import List
 
-from .fisher_info import FisherInfoMat
+from .fisher_info import FisherInfo
 
 __all__ = ['NGD', 'ngd']
 
@@ -33,7 +33,7 @@ def _use_grad_for_differentiable(func):
 class NGD(Optimizer):
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
-                 weight_decay=0,  differentiable=False):
+                    weight_decay=0,  differentiable=False):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if weight_decay < 0.0:
@@ -51,7 +51,7 @@ class NGD(Optimizer):
             group.setdefault('differentiable', False)
 
     @_use_grad_for_differentiable
-    def step(self, fisher_info_matrix: FisherInfoMat, closure=None):
+    def step(self, fisher_info: FisherInfo, closure=None):
         
         """Performs a single optimization step.
         Args:
@@ -75,7 +75,7 @@ class NGD(Optimizer):
 
             ngd(params_with_grad,
                 d_p_list,
-                fisher_info_matrix,
+                fisher_info,
                 weight_decay=group['weight_decay'],
                 lr=group['lr'],
                 )
@@ -84,7 +84,7 @@ class NGD(Optimizer):
 
 def ngd(params: List[Tensor],
         d_p_list: List[Tensor],
-        fisher_info_matrix: FisherInfoMat,
+        fisher_info: FisherInfo,
         weight_decay: float,
         lr: float,
         ):
@@ -96,16 +96,16 @@ def ngd(params: List[Tensor],
 
     func(params,
         d_p_list,
-        fisher_info_matrix=fisher_info_matrix,
+        fisher_info=fisher_info,
         weight_decay=weight_decay,
         lr=lr,
         )
 
 def _single_tensor_ngd(params: List[Tensor],
         d_p_list: List[Tensor],
-        fisher_info_matrix: FisherInfoMat,
+        fisher_info: FisherInfo,
         weight_decay: float,
-        lr: float,
+        lr: float
     ):
 
     for i, param in enumerate(params):
@@ -114,7 +114,7 @@ def _single_tensor_ngd(params: List[Tensor],
         if weight_decay != 0:
             d_p = d_p.add(param, alpha=weight_decay)
 
-        d_p = fisher_info_matrix.fvp(
+        d_p = fisher_info.Fvp(
                 d_p, 
                 use_inverse=True
             )
