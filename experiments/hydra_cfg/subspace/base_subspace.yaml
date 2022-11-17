@@ -10,7 +10,7 @@ fine_tuning:
   loss_function: mse
   optim:
     optimizer: ngd
-    lr: 5e-0
+    lr: 1e1
     weight_decay: 0.
     gamma: 1e-4
 fisher_info:
