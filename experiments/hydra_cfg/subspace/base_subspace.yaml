@@ -15,8 +15,8 @@ fine_tuning:
     gamma: 1e-4
 fisher_info:
   batch_size: 8
-  mixing_factor: 0.5
-  damping_factor: 1e-3
+  mixing_factor: 0.1
+  damping_factor: 5e-3
   mode: full
   use_init_fisher_info_matrix: True
   init_fisher_info_matrix:

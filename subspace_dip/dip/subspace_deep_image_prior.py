@@ -123,7 +123,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         filtbackproj: Optional[Tensor] = None,
         ground_truth: Optional[Tensor] = None,
         recon_from_randn: bool = False,
-        use_tv_loss: bool = False,
+        use_tv_loss: bool = True,
         fisher_info: Optional[FisherInfo] = None,
         log_path: str = '.',
         show_pbar: bool = True,

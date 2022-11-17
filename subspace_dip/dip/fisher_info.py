@@ -109,7 +109,8 @@ class FisherInfo:
 
     def randm_rank_one_update(self,
         tuneset: DataLoader,
-        batch_size: int = 50,
+        batch_size: int = 10,
+        damping_factor: float = 1e-3,
         use_forward_op: bool = True
         ) -> Tensor:
         
@@ -138,9 +139,9 @@ class FisherInfo:
                 return _vjp_fn(v)[0]
 
             vJp = vmap(_single_vjp, in_dims=0)(v)
-            update = torch.einsum('Np,Nc->pc', vJp, vJp)
+            update = torch.einsum('Np,Nc->pc', vJp, vJp) / batch_size
         
-        return update
+        return self._add_damping(matrix=update,damping_factor=damping_factor)
 
     def update(self,
             tuneset: DataLoader,
@@ -158,7 +159,9 @@ class FisherInfo:
             )
         elif mode == 'jvp_rank_one':
             update = self.randm_rank_one_update(
-                tuneset=tuneset, 
+                tuneset=tuneset,
+                use_forward_op=use_forward_op, 
+                damping_factor=damping_factor
             )
         
         else: 
