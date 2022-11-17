@@ -109,33 +109,37 @@ class FisherInfo:
 
     def randm_rank_one_update(self,
         tuneset: DataLoader,
-        batch_size: int = 10,
+        batch_size: int = 50,
         use_forward_op: bool = True
         ) -> Tensor:
         
-        v = torch.zeros(
-            (batch_size, )
-                ).to(device=self.subspace_dip.device)
-        mask = list(np.random.choice(self.shape[0], batch_size, replace=False))
-        v[list(range(batch_size)), mask] = 1.
+        if not use_forward_op: 
+            shape = self.subspace_dip.ray_trafo.im_shape
+        else: 
+            shape = self.subspace_dip.ray_trafo.obs_shape
 
         _, _, fbp = next(iter(tuneset))
-
-        _fnet_single = partial(self._fnet_single,
-            input=fbp, 
-            use_forward_op=use_forward_op
-        )
         with torch.no_grad():
-            def _single_jvp(v):
-                _, _jvp_fn = vjp(
-                        _fnet_single, 
-                        (self.subspace_dip.subspace.parameters_vec,), 
-                        (v,)
-                    )
-                return _jvp_fn
+            v = torch.randn(
+                (batch_size, 1, 1, *shape)
+                    ).to(device=self.subspace_dip.device)
 
-            Jvp = vmap(_single_jvp, in_dims=0)(v) # .squeeze(dim=1).squeeze(dim=1)
-            update = torch.mean(torch.einsum('Npo,Nco->Npc', Jvp, Jvp), dim=0)
+            v /= v.norm(dim=0, keepdim=True)
+
+            _fnet_single = partial(self._fnet_single,
+                input=fbp, 
+                use_forward_op=use_forward_op
+            )
+            _, _vjp_fn = vjp(_fnet_single, 
+                    self.subspace_dip.subspace.parameters_vec
+                )
+
+            def _single_vjp(v):
+                return _vjp_fn(v)[0]
+
+            vJp = vmap(_single_vjp, in_dims=0)(v)
+            update = torch.einsum('Np,Nc->pc', vJp, vJp)
+        
         return update
 
     def update(self,
