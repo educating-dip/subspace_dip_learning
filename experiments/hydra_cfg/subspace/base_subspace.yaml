@@ -15,6 +15,7 @@ fine_tuning:
     gamma: 1e-4
 fisher_info:
   batch_size: 8
+  num_random_vecs: 50
   mixing_factor: 0.1
   damping_factor: 5e-3
   mode: full

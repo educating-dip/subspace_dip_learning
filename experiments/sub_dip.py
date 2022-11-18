@@ -96,9 +96,8 @@ def coordinator(cfg : DictConfig) -> None:
 
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
+            num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
             valset=valset, 
-            batch_size=cfg.subspace.fisher_info.batch_size, 
-            damping_factor=cfg.subspace.fisher_info.damping_factor,
             mode=cfg.subspace.fisher_info.mode
         )
 
@@ -130,6 +129,7 @@ def coordinator(cfg : DictConfig) -> None:
                 'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay, 
                 'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                 'gamma': cfg.subspace.fine_tuning.optim.gamma,
+                'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                 'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
                 'damping_factor': cfg.subspace.fisher_info.damping_factor,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
