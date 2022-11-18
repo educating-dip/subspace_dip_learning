@@ -15,18 +15,19 @@ class FisherInfo:
             subspace_dip,
             valset: DataLoader, 
             batch_size: int = 1, 
-            damping_factor: float = 1e-3
+            damping_factor: float = 1e-3, 
+            mode: str = 'full'
         ):
 
         self.subspace_dip = subspace_dip
         self.batch_size = batch_size
         self.num_inputs_valset = len(valset)
-        self.matrix = self.init_fisher_info_matrix(
-            valset=valset, damping_factor=damping_factor
+        self.matrix = self.init_fisher_info(
+            valset=valset, damping_factor=damping_factor, mode=mode
         )
 
     @property
-    def shape(self, 
+    def shape(self,
             ) -> Tuple[int,int]:
 
         size = self.matrix.shape[0]
@@ -60,7 +61,7 @@ class FisherInfo:
             )
         return out
 
-    def assemble_fisher_info_matrix(self, 
+    def assemble_fisher_info(self, 
             valset: DataLoader,
             damping_factor: float,
             use_forward_op: bool = True
@@ -82,34 +83,47 @@ class FisherInfo:
                         -1, self.subspace_dip.subspace.num_subspace_params
                     ) # the inferred dim is im_shape: nn_model_output
                 per_inputs_jac_list.append(jac)
+
             per_inputs_jac = torch.cat(per_inputs_jac_list)
-            fisher_info_mat = torch.mean(
+            matrix = torch.mean(
                 torch.einsum(
                     'Nop,Noc->Npc',
                     per_inputs_jac, 
                     per_inputs_jac),
                         dim=0)
-     
+
             return self._add_damping(
-                matrix=fisher_info_mat,
+                matrix=matrix,
                 damping_factor=damping_factor
             ) 
 
-    def init_fisher_info_matrix(self,
+    def init_fisher_info(self,
             valset: DataLoader,
             damping_factor: float = 1e-3,
-            use_forward_op: bool = True, 
+            use_forward_op: bool = True,
+            mode: str = 'full'
         ) -> Tensor:
-
-        return self.assemble_fisher_info_matrix(
-                valset=valset, 
+        
+        if mode == 'full':
+            matrix = self.assemble_fisher_info(
+                valset=valset,
                 damping_factor=damping_factor,
                 use_forward_op=use_forward_op
             )
+        elif mode == 'vjp_rank_one':
+            matrix = self.random_assemble_fisher_info(                
+                valset=valset, 
+                damping_factor=damping_factor,
+                use_forward_op=use_forward_op
+                )
+        else: 
+            raise NotImplementedError
 
-    def randm_rank_one_update(self,
-        tuneset: DataLoader,
-        batch_size: int = 10,
+        return matrix
+
+    def random_assemble_fisher_info(self,
+        valset: DataLoader,
+        batch_size: int = 100,
         damping_factor: float = 1e-3,
         use_forward_op: bool = True
         ) -> Tensor:
@@ -119,29 +133,35 @@ class FisherInfo:
         else: 
             shape = self.subspace_dip.ray_trafo.obs_shape
 
-        _, _, fbp = next(iter(tuneset))
         with torch.no_grad():
-            v = torch.randn(
-                (batch_size, 1, 1, *shape)
-                    ).to(device=self.subspace_dip.device)
+            per_inputs_fisher_list = []
+            for _, _, fbp in valset:
 
-            v /= v.norm(dim=0, keepdim=True)
+                v = torch.randn(
+                    (batch_size, 1, 1, *shape)
+                        ).to(device=self.subspace_dip.device)
 
-            _fnet_single = partial(self._fnet_single,
-                input=fbp, 
-                use_forward_op=use_forward_op
-            )
-            _, _vjp_fn = vjp(_fnet_single, 
-                    self.subspace_dip.subspace.parameters_vec
+                v /= v.norm(dim=0, keepdim=True)
+
+                _fnet_single = partial(self._fnet_single,
+                    input=fbp, 
+                    use_forward_op=use_forward_op
                 )
+                _, _vjp_fn = vjp(_fnet_single, 
+                        self.subspace_dip.subspace.parameters_vec
+                    )
 
-            def _single_vjp(v):
-                return _vjp_fn(v)[0]
+                def _single_vjp(v):
+                    return _vjp_fn(v)[0]
 
-            vJp = vmap(_single_vjp, in_dims=0)(v)
-            update = torch.einsum('Np,Nc->pc', vJp, vJp) / batch_size
-        
-        return self._add_damping(matrix=update,damping_factor=damping_factor)
+                vJp = vmap(_single_vjp, in_dims=0)(v)
+                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / batch_size
+                per_inputs_fisher_list.append(matrix)
+
+            per_inputs_fisher = torch.stack(per_inputs_fisher_list)
+            matrix = torch.mean(per_inputs_fisher, dim=0)
+            
+        return self._add_damping(matrix=matrix,damping_factor=damping_factor)
 
     def update(self,
             tuneset: DataLoader,
@@ -150,16 +170,16 @@ class FisherInfo:
             use_forward_op: bool = True,
             mode: str = 'full'
         ) -> None:
-        
+
         if mode == 'full': 
-            update = self.assemble_fisher_info_matrix(
+            update = self.assemble_fisher_info(
                 valset=tuneset, 
                 damping_factor=damping_factor,
                 use_forward_op=use_forward_op
             )
-        elif mode == 'jvp_rank_one':
-            update = self.randm_rank_one_update(
-                tuneset=tuneset,
+        elif mode == 'vjp_rank_one':
+            update = self.random_assemble_fisher_info(
+                valset=tuneset,
                 use_forward_op=use_forward_op, 
                 damping_factor=damping_factor
             )

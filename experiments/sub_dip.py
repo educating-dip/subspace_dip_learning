@@ -98,7 +98,8 @@ def coordinator(cfg : DictConfig) -> None:
             subspace_dip=reconstructor,
             valset=valset, 
             batch_size=cfg.subspace.fisher_info.batch_size, 
-            damping_factor=cfg.subspace.fisher_info.damping_factor
+            damping_factor=cfg.subspace.fisher_info.damping_factor,
+            mode=cfg.subspace.fisher_info.mode
         )
 
     dataset = get_standard_test_dataset(
