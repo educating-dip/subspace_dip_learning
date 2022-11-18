@@ -233,6 +233,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                                 ground_truth
                                 )
                             ),
+                        it=i,
+                        num_random_vecs=optim_kwargs['optim']['num_random_vecs'],
                         mixing_factor=optim_kwargs['optim']['mixing_factor'], 
                         damping_factor=optim_kwargs['optim']['damping_factor'],
                         use_forward_op=True,
