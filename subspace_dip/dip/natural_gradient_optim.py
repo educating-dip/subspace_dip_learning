@@ -51,19 +51,12 @@ class NGD(Optimizer):
             group.setdefault('differentiable', False)
 
     @_use_grad_for_differentiable
-    def step(self, fisher_info: FisherInfo, closure=None):
+    def step(self, fisher_info: FisherInfo, closure=None, loss=None, use_adaptive_damping: bool = False):
         
         """Performs a single optimization step.
         Args:
             fisher_info_matrix
-            closure (Callable, optional): A closure that reevaluates the model
-                and returns the loss.
         """
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
         for group in self.param_groups:
             params_with_grad = []
             d_p_list = []
@@ -78,15 +71,19 @@ class NGD(Optimizer):
                 fisher_info,
                 weight_decay=group['weight_decay'],
                 lr=group['lr'],
+                use_adaptive_damping=use_adaptive_damping,
+                closure=closure, 
+                loss=loss
                 )
-
-        return loss
 
 def ngd(params: List[Tensor],
         d_p_list: List[Tensor],
         fisher_info: FisherInfo,
         weight_decay: float,
         lr: float,
+        use_adaptive_damping: bool = False,
+        closure=None, 
+        loss=None
         ):
     r"""Functional API that performs SGD algorithm computation.
     See :class:`~torch.optim.SGD` for details.
@@ -99,13 +96,31 @@ def ngd(params: List[Tensor],
         fisher_info=fisher_info,
         weight_decay=weight_decay,
         lr=lr,
+        use_adaptive_damping=use_adaptive_damping, 
+        closure=closure, 
+        loss=loss
         )
+
+def _compute_reduction_ratio(fisher_info, closure, loss, param, weight_decay, d_p, lr):
+
+    delta = - lr * d_p
+    den = .5 * delta @ fisher_info.fvp(delta, weight_decay=weight_decay) + param.grad @ delta
+    up_params = param + delta
+    next_loss = closure(parameters_vec=up_params)[0]
+    num = next_loss - loss
+    rho = num / den
+
+    return rho.item()
+
 
 def _single_tensor_ngd(params: List[Tensor],
         d_p_list: List[Tensor],
         fisher_info: FisherInfo,
         weight_decay: float,
-        lr: float
+        lr: float, 
+        use_adaptive_damping: bool = False,
+        closure=None, 
+        loss=None
     ):
 
     for i, param in enumerate(params):
@@ -114,8 +129,33 @@ def _single_tensor_ngd(params: List[Tensor],
         if weight_decay != 0:
             d_p = d_p.add(param, alpha=weight_decay)
 
-        d_p = fisher_info.Fvp(
+        d_p = fisher_info.fvp(
+                d_p,
+                weight_decay=weight_decay,
+                use_inverse=True
+            )
+        
+        if use_adaptive_damping: 
+            rho = _compute_reduction_ratio(
+                fisher_info=fisher_info,
+                closure=closure, 
+                loss=loss, 
+                param=param,
+                weight_decay=weight_decay,
+                d_p=d_p, 
+                lr=lr
+            )
+
+            if rho < 0.25:
+                damping_fct = fisher_info.damping_fct
+                fisher_info.damping_fct = (19/20)**(-1) * damping_fct
+            elif rho > 0.75:
+                damping_fct = fisher_info.damping_fct
+                fisher_info.damping_fct = (19/20)**(1) * damping_fct
+
+        d_p = fisher_info.fvp(
                 d_p, 
                 use_inverse=True
             )
+        
         param.add_(d_p, alpha=-lr)

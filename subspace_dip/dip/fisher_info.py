@@ -15,8 +15,8 @@ class FisherInfo:
     def __init__(self, 
             subspace_dip,
             valset: DataLoader,
-            num_random_vecs: int = 10, 
-            damping_factor: float = 1e-3, 
+            num_random_vecs: int = 10,
+            init_damping_fct: float = 1e-3,
             mode: str = 'full'
         ):
 
@@ -25,7 +25,7 @@ class FisherInfo:
         self.matrix = self.init_fisher_info(
             valset=valset, mode=mode, num_random_vecs=num_random_vecs,
         )
-
+        self._damping_fct = init_damping_fct
 
     @property
     def shape(self,
@@ -34,34 +34,33 @@ class FisherInfo:
         size = self.matrix.shape[0]
         return (size, size)
 
+    @property
+    def damping_fct(self):
+        return self._damping_fct
 
-    def Fvp(self, 
+    @damping_fct.setter
+    def damping_fct(self, value):
+        self._damping_fct = value
+
+    def fvp(self, 
             v: Tensor,
-            use_inverse: bool = False
+            use_inverse: bool = False,
+            weight_decay: float = 0.
         ) -> Tensor:
+        
+        matrix = self._add_damping(matrix=self.matrix,
+            weight_decay=weight_decay
+            )
 
-        return self.matrix @ v if not use_inverse else torch.linalg.solve(self.matrix, v)
-
+        return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
 
     def _add_damping(self,  
             matrix: Tensor,
-            it: int,
-            damping_factor: float = 1e-3, 
-            mixing_factor: float = 0.1, 
-            mode: str = 'fixed'
+            weight_decay: float = 0.,  
         ) -> Tensor:
 
-        if mode == 'fixed': 
-            fct = damping_factor
-        elif mode == 'adaptive': 
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
-            # fct = (1 - mixing_factor + mixing_factor**it) * damping_factor
-        
-        matrix[np.diag_indices(matrix.shape[0])] += fct
+        matrix[np.diag_indices(matrix.shape[0])] += self.damping_fct + weight_decay
         return matrix
-
 
     def _fnet_single(self,
             parameters_vec: Tensor,
@@ -177,9 +176,7 @@ class FisherInfo:
 
     def update(self,
             tuneset: DataLoader,
-            it: int, 
             mixing_factor: float = 0.5,
-            damping_factor: float = 1e-3,
             num_random_vecs: int = 10,
             use_forward_op: bool = True,
             mode: str = 'full'
@@ -201,9 +198,4 @@ class FisherInfo:
             raise NotImplementedError
 
         matrix = mixing_factor * self.matrix + (1. - mixing_factor) * update
-        self.matrix = self._add_damping(
-            matrix=matrix,
-            it=it,
-            damping_factor=damping_factor, 
-            mixing_factor=mixing_factor
-            )
+        self.matrix = matrix

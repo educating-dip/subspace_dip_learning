@@ -62,7 +62,12 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
         )
 
-    fisher_info = None 
+    fisher_info = None
+    assert cfg.subspace.fine_tuning.optim.weight_decay == cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay
+    if cfg.subspace.fine_tuning.optim.weight_decay != 0.: 
+        print(f'using weight_decay: {cfg.subspace.fine_tuning.optim.weight_decay}')
+        weight_decay = cfg.subspace.fine_tuning.optim.weight_decay
+
     if (cfg.subspace.fine_tuning.optim.optimizer == 'ngd') and cfg.subspace.fisher_info.use_init_fisher_info_matrix:
         valset = DataLoader(
             get_ellipses_dataset(
@@ -97,8 +102,9 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
-            valset=valset, 
-            mode=cfg.subspace.fisher_info.mode
+            valset=valset,
+            mode=cfg.subspace.fisher_info.mode,
+            init_damping_fct=cfg.subspace.fisher_info.damping_factor
         )
 
     dataset = get_standard_test_dataset(
@@ -126,12 +132,11 @@ def coordinator(cfg : DictConfig) -> None:
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
                 'lr': cfg.subspace.fine_tuning.optim.lr,
-                'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay, 
                 'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                 'gamma': cfg.subspace.fine_tuning.optim.gamma,
                 'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
+                'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
                 'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
-                'damping_factor': cfg.subspace.fisher_info.damping_factor,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
                 'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim,
                 'mode': cfg.subspace.fisher_info.mode
