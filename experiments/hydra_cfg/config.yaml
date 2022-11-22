@@ -1,6 +1,6 @@
 defaults:
   - source_dataset: ellipses
-  - test_dataset: rectangles
+  - test_dataset: cartoonset
   - trafo: simple_trafo
   - dip: small_unet
   - sampler: base_sampler

@@ -9,8 +9,18 @@ from torch import Tensor
 from functorch import vmap, jacrev, vjp
 from torch.utils.data import DataLoader
 
-class FisherInfo:
 
+def get_random_unit_probes(num_random_vecs, shape):
+
+    new_shape = (num_random_vecs, 1, 1, np.prod(shape))
+    v = torch.zeros(*new_shape)
+    randinds = torch.randperm(np.prod(shape))[:num_random_vecs]
+    v[range(len(randinds)), :, :, randinds] = 1.
+    v = v.reshape(num_random_vecs, 1, 1, *shape)
+    
+    return v
+
+class FisherInfo:
 
     def __init__(self, 
             subspace_dip,
@@ -75,7 +85,6 @@ class FisherInfo:
             )
         return out
 
-
     def assemble_fisher_info(self, 
             valset: DataLoader,
             use_forward_op: bool = True
@@ -107,7 +116,6 @@ class FisherInfo:
 
             return matrix
 
-
     def init_fisher_info(self,
             valset: DataLoader,
             num_random_vecs: int = 100, 
@@ -131,10 +139,9 @@ class FisherInfo:
 
         return matrix
 
-
     def random_assemble_fisher_info(self,
         valset: DataLoader,
-        num_random_vecs: int = 100,
+        num_random_vecs: int = 10,
         use_forward_op: bool = True
         ) -> Tensor:
         
@@ -146,18 +153,14 @@ class FisherInfo:
         with torch.no_grad():
             per_inputs_fisher_list = []
             for _, _, fbp in valset:
-
-                v = torch.randn(
-                    (num_random_vecs, 1, 1, *shape)
-                        ).to(device=self.subspace_dip.device)
-
-                v /= v.norm(dim=0, keepdim=True)
-
+                
+                v = torch.randn((num_random_vecs, 1, 1, *shape), device=self.subspace_dip.device)
+                
                 _fnet_single = partial(self._fnet_single,
-                    input=fbp, 
+                    input=fbp,
                     use_forward_op=use_forward_op
-                )
-                _, _vjp_fn = vjp(_fnet_single, 
+                    )
+                _, _vjp_fn = vjp(_fnet_single,
                         self.subspace_dip.subspace.parameters_vec
                     )
 
@@ -165,7 +168,7 @@ class FisherInfo:
                     return _vjp_fn(v)[0]
 
                 vJp = vmap(_single_vjp, in_dims=0)(v)
-                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
+                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs #* (np.prod(shape) / num_random_vecs)
                 per_inputs_fisher_list.append(matrix)
 
             per_inputs_fisher = torch.stack(per_inputs_fisher_list)
@@ -173,10 +176,9 @@ class FisherInfo:
 
         return matrix
 
-
     def update(self,
             tuneset: DataLoader,
-            mixing_factor: float = 0.5,
+            mixing_factor: float = 0.45,
             num_random_vecs: int = 10,
             use_forward_op: bool = True,
             mode: str = 'full'

@@ -141,9 +141,9 @@ def _compute_adaptive_damping_via_reduction_ratio(
             use_inverse=False
         ) + param.grad @ delta
     
-    params = param + delta
-    n_loss = closure(parameters_vec=params)[0]
-    red_in_obj = n_loss - loss
+    n_params = param + delta
+    n_loss = closure(parameters_vec=n_params)[0]
+    red_in_obj = n_loss - loss # missing weight decay 
     rho = red_in_obj / red_pred_by_quad_model
     damping_fct = fisher_info.damping_fct
 
@@ -151,7 +151,8 @@ def _compute_adaptive_damping_via_reduction_ratio(
         damping_fct = decay_fct**(-T)*damping_fct
     elif rho > 0.75:
         damping_fct = decay_fct**(T)*damping_fct
-    return damping_fct, rho
+
+    return damping_fct, rho.item()
 
 def _single_tensor_ngd(params: List[Tensor],
         d_p_list: List[Tensor],
@@ -178,7 +179,7 @@ def _single_tensor_ngd(params: List[Tensor],
             delta = mem_state['delta']
             adaptive_damping_kwargs = {
                 'weight_decay': weight_decay,
-                'T': 5, 
+                'T': T, 
                 'decay_fct': (19/20)
                 }
             damping, rho = _compute_adaptive_damping_via_reduction_ratio(
@@ -192,10 +193,10 @@ def _single_tensor_ngd(params: List[Tensor],
             fisher_info.damping_fct = damping
 
         d_p = fisher_info.fvp(
-                d_p, 
+                d_p,
+                weight_decay=weight_decay,
                 use_inverse=True
             )
-
         param.add_(d_p, alpha=-lr)
 
         if use_adaptive_damping:

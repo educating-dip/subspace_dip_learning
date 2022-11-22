@@ -10,19 +10,19 @@ fine_tuning:
   loss_function: mse
   optim:
     optimizer: ngd
-    lr: 1e1
-    weight_decay: 0.
+    lr: 1e-1
+    weight_decay: 1e-4
     gamma: 1e-4
 fisher_info:
   batch_size: 8
-  num_random_vecs: 50
-  mixing_factor: 0.1
-  damping_factor: 1e-3
-  mode: full
+  num_random_vecs: 1
+  mixing_factor: 0.65
+  damping_factor: 1
+  mode: vjp_rank_one
   use_init_fisher_info_matrix: True
   init_fisher_info_matrix:
     epochs: 5
     batch_size: 16
     optim:
       lr: 1e-3
-      weight_decay: 0.
+      weight_decay: 1e-4
