@@ -1,3 +1,4 @@
+from typing import Dict, List, Optional, Tuple
 import torch
 from torch import Tensor
 from torch.optim import Optimizer
@@ -40,8 +41,8 @@ class NGD(Optimizer):
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
-                        weight_decay=weight_decay,
-                        differentiable=differentiable)
+                        weight_decay=weight_decay, differentiable=differentiable)
+        self.mem_state = {'delta': None, 'rho': [], 'damping': []}
 
         super(NGD, self).__init__(params, defaults)
 
@@ -51,12 +52,19 @@ class NGD(Optimizer):
             group.setdefault('differentiable', False)
 
     @_use_grad_for_differentiable
-    def step(self, fisher_info: FisherInfo, closure=None, loss=None, use_adaptive_damping: bool = False):
+    def step(self, 
+            fisher_info: FisherInfo,
+            use_adaptive_damping: bool = False,
+            it: int = None,
+            closure=None, 
+            loss=None,
+        ):
         
         """Performs a single optimization step.
         Args:
             fisher_info_matrix
         """
+
         for group in self.param_groups:
             params_with_grad = []
             d_p_list = []
@@ -66,15 +74,23 @@ class NGD(Optimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            ngd(params_with_grad,
+            memory = ngd(params_with_grad,
                 d_p_list,
                 fisher_info,
                 weight_decay=group['weight_decay'],
                 lr=group['lr'],
                 use_adaptive_damping=use_adaptive_damping,
+                mem_state=self.mem_state,
+                it=it,
                 closure=closure, 
                 loss=loss
                 )
+
+            if use_adaptive_damping: 
+                self.mem_state['delta'] = memory[0]
+                self.mem_state['rho'].append(memory[1])
+                self.mem_state['damping'].append(memory[2])
+
 
 def ngd(params: List[Tensor],
         d_p_list: List[Tensor],
@@ -82,80 +98,106 @@ def ngd(params: List[Tensor],
         weight_decay: float,
         lr: float,
         use_adaptive_damping: bool = False,
-        closure=None, 
+        mem_state: Optional[Dict[str, List[Tensor]]] = {},
+        it: Optional[int] = None, 
+        closure=None,
         loss=None
-        ):
-    r"""Functional API that performs SGD algorithm computation.
-    See :class:`~torch.optim.SGD` for details.
+        ) -> Tuple[Tensor, float, float]:
+
+
+    r"""Functional API that performs NGD algorithm computation.
     """
 
     func = _single_tensor_ngd
 
-    func(params,
+    memory = func(params,
         d_p_list,
         fisher_info=fisher_info,
         weight_decay=weight_decay,
         lr=lr,
-        use_adaptive_damping=use_adaptive_damping, 
-        closure=closure, 
+        use_adaptive_damping=use_adaptive_damping,
+        mem_state=mem_state,
+        it=it,
+        closure=closure,
         loss=loss
         )
 
-def _compute_reduction_ratio(fisher_info, closure, loss, param, weight_decay, d_p, lr):
+    if use_adaptive_damping: return memory
 
-    delta = - lr * d_p
-    den = .5 * delta @ fisher_info.fvp(delta, weight_decay=weight_decay) + param.grad @ delta
-    up_params = param + delta
-    next_loss = closure(parameters_vec=up_params)[0]
-    num = next_loss - loss
-    rho = num / den
+def _compute_adaptive_damping_via_reduction_ratio(
+        fisher_info: FisherInfo, 
+        closure: callable, 
+        loss: Tensor, 
+        param: Tensor,
+        delta: Tensor,
+        weight_decay: float,
+        T: float, 
+        decay_fct: float,
+    ) -> Tuple[float,float]:
+    
+    red_pred_by_quad_model = .5*delta @ fisher_info.fvp(
+            delta, 
+            weight_decay=weight_decay, 
+            use_inverse=False
+        ) + param.grad @ delta
+    
+    params = param + delta
+    n_loss = closure(parameters_vec=params)[0]
+    red_in_obj = n_loss - loss
+    rho = red_in_obj / red_pred_by_quad_model
+    damping_fct = fisher_info.damping_fct
 
-    return rho.item()
-
+    if rho < 0.25:
+        damping_fct = decay_fct**(-T)*damping_fct
+    elif rho > 0.75:
+        damping_fct = decay_fct**(T)*damping_fct
+    return damping_fct, rho
 
 def _single_tensor_ngd(params: List[Tensor],
         d_p_list: List[Tensor],
         fisher_info: FisherInfo,
-        weight_decay: float,
-        lr: float, 
+        mem_state: Optional[Dict[str, List[Tensor]]] = {},
+        weight_decay: float = 0.,
+        lr: float = 1e-3, 
         use_adaptive_damping: bool = False,
-        closure=None, 
-        loss=None
-    ):
+        closure = None,
+        loss = None, 
+        it: Optional[int] = None,
+        T: int = 5
+    )-> Tuple[Tensor, float, float]:
 
     for i, param in enumerate(params):
         d_p = d_p_list[i] 
 
         if weight_decay != 0:
             d_p = d_p.add(param, alpha=weight_decay)
-
-        d_p = fisher_info.fvp(
-                d_p,
-                weight_decay=weight_decay,
-                use_inverse=True
-            )
         
-        if use_adaptive_damping: 
-            rho = _compute_reduction_ratio(
+        damping, rho = None, None
+        if use_adaptive_damping and ( (it + 1) % T == 0):
+            
+            delta = mem_state['delta']
+            adaptive_damping_kwargs = {
+                'weight_decay': weight_decay,
+                'T': 5, 
+                'decay_fct': (19/20)
+                }
+            damping, rho = _compute_adaptive_damping_via_reduction_ratio(
                 fisher_info=fisher_info,
-                closure=closure, 
-                loss=loss, 
+                closure=closure,
                 param=param,
-                weight_decay=weight_decay,
-                d_p=d_p, 
-                lr=lr
+                loss=loss, 
+                delta=delta,
+                **adaptive_damping_kwargs
             )
-
-            if rho < 0.25:
-                damping_fct = fisher_info.damping_fct
-                fisher_info.damping_fct = (19/20)**(-1) * damping_fct
-            elif rho > 0.75:
-                damping_fct = fisher_info.damping_fct
-                fisher_info.damping_fct = (19/20)**(1) * damping_fct
+            fisher_info.damping_fct = damping
 
         d_p = fisher_info.fvp(
                 d_p, 
                 use_inverse=True
             )
-        
+
         param.add_(d_p, alpha=-lr)
+
+        if use_adaptive_damping:
+            return -lr*d_p, rho, damping
+    
