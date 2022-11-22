@@ -250,9 +250,10 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     )
                     self.optimizer.step(
                             fisher_info=fisher_info,
+                            use_adaptive_damping=True,
                             closure=partial_closure,
                             loss=loss,
-                            use_adaptive_damping=True
+                            it=i
                         )
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
