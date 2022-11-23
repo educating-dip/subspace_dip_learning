@@ -115,7 +115,7 @@ def ngd(params: List[Tensor],
         damping_adaptation_decay: float = 0.9,
         damping_lower_threshold: float = 0.25,
         damping_upper_threshold: float = 0.75,
-        include_damping_in_quad_change: bool = False,
+        include_damping_in_quad_change: bool = True,
         step_counter: int = 0, 
         closure=None,
         loss=None
@@ -182,7 +182,7 @@ def _quad_model(
         grads: Tensor,
         delta: Tensor,
         weight_decay: float, 
-        include_damping_in_quad_change: bool = False,
+        include_damping_in_quad_change: bool = True,
         use_approximate_quad_model: bool = False
     ) -> Tuple[Tensor, Tensor]:
 
@@ -208,7 +208,7 @@ def _compute_quadratic_model_value(
         grads: Tensor,
         delta: Tensor,
         weight_decay: float, 
-        include_damping_in_quad_change: bool = False,
+        include_damping_in_quad_change: bool = True,
         use_approximate_quad_model: bool = False
     ) -> Tensor:
 
@@ -221,7 +221,7 @@ def _compute_quadratic_model_value(
         use_approximate_quad_model=use_approximate_quad_model
         )
 
-    return A / 2 + b
+    return .5*A + b
 
 def _compute_new_damping_and_rho(
         curvature: FisherInfo, 
@@ -234,7 +234,7 @@ def _compute_new_damping_and_rho(
         min_damping: float = 1e-8,
         max_damping: float = np.inf,
         damping_adaptation_interval: int = 5, 
-        damping_adaptation_decay: float = 0.9,
+        damping_adaptation_decay: float = 0.95,
         damping_lower_threshold: float = 0.25,
         damping_upper_threshold: float = 0.75,
         include_damping_in_quad_change: bool = False,
@@ -329,10 +329,12 @@ def _single_tensor_ngd(params: List[Tensor],
                 buf = torch.clone(d_p).detach()
             else:
                 buf.mul_(momentum).add_(d_p, alpha=lr)
-        if nesterov:
-            d_p = d_p.add(buf, alpha=momentum)
-        else:
-            d_p = buf
+            if nesterov:
+                d_p = d_p.add(buf, alpha=momentum)
+            else:
+                d_p = buf
+        else: 
+            d_p.mul_(lr)
 
         param.add_(d_p, alpha=-1)
 
