@@ -106,6 +106,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         parameters_vec: Optional[Tensor] = None, 
         slicing_sequence: Optional[Sequence] = None,
         use_forward_op: bool = False,
+        weight_decay: Optional[float] = None, 
         gamma: Optional[float] = None, 
         return_output: Optional[bool] = True
         ):
@@ -115,10 +116,13 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 slicing_sequence=slicing_sequence,
                 use_forward_op=use_forward_op
             )
-
+        
         loss = criterion(self.ray_trafo(output), noisy_observation)
         if use_tv_loss:
             loss = loss + gamma*tv_loss(output)
+        if weight_decay !=0:
+            loss = loss +  weight_decay / 2 * torch.sum(
+                self.subspace.parameters_vec**2 if parameters_vec is None else parameters_vec**2)
         return loss if not return_output else (loss, output)
 
     def reconstruct(self,
@@ -158,7 +162,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             self.optimizer = NGD(
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
-                weight_decay=optim_kwargs['optim']['weight_decay']
+                weight_decay=optim_kwargs['optim']['weight_decay'], 
+                momentum=optim_kwargs['optim']['momentum'], 
+                nesterov=optim_kwargs['optim']['use_nesterov'], 
                 )
         elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
             self.optimizer = torch.optim.LBFGS(
@@ -216,6 +222,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     criterion=criterion,
                     noisy_observation=noisy_observation,
                     use_tv_loss=use_tv_loss,
+                    weight_decay=optim_kwargs['optim']['weight_decay'],
                     slicing_sequence=slicing_sequence,
                     gamma=optim_kwargs['optim']['gamma']
                     )
@@ -237,7 +244,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                                 )
                             ),
                         num_random_vecs=optim_kwargs['optim']['num_random_vecs'],
-                        mixing_factor=optim_kwargs['optim']['mixing_factor'], 
+                        curvature_ema=optim_kwargs['optim']['curvature_ema'], 
                         use_forward_op=True,
                         mode=optim_kwargs['optim']['mode']
                     )
@@ -245,16 +252,17 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         criterion=criterion,
                         noisy_observation=noisy_observation,
                         use_tv_loss=use_tv_loss,
+                        weight_decay=optim_kwargs['optim']['weight_decay'],
                         slicing_sequence=slicing_sequence,
                         gamma=optim_kwargs['optim']['gamma']
                     )
                     self.optimizer.step(
-                            fisher_info=fisher_info,
-                            use_adaptive_damping=True,
-                            closure=partial_closure,
-                            loss=loss,
-                            it=i
-                        )
+                        curvature=fisher_info,
+                        use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
+                        use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
+                        closure=partial_closure,
+                        loss=loss,
+                    )
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
                         lambda: self.objective(

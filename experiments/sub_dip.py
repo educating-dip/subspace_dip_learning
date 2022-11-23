@@ -104,7 +104,7 @@ def coordinator(cfg : DictConfig) -> None:
             num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
             valset=valset,
             mode=cfg.subspace.fisher_info.mode,
-            init_damping_fct=cfg.subspace.fisher_info.damping_factor
+            initial_damping=cfg.subspace.fisher_info.initial_damping
         )
 
     dataset = get_standard_test_dataset(
@@ -132,11 +132,15 @@ def coordinator(cfg : DictConfig) -> None:
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
                 'lr': cfg.subspace.fine_tuning.optim.lr,
+                'momentum': cfg.subspace.fine_tuning.optim.momentum,
+                'use_nesterov': cfg.subspace.fine_tuning.optim.use_nesterov,
                 'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                 'gamma': cfg.subspace.fine_tuning.optim.gamma,
                 'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                 'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
-                'mixing_factor': cfg.subspace.fisher_info.mixing_factor,
+                'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
+                'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
+                'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
                 'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim,
                 'mode': cfg.subspace.fisher_info.mode

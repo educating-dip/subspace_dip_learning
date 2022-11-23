@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 import torch
@@ -6,7 +6,7 @@ import numpy as np
 from functools import partial
 
 from torch import Tensor
-from functorch import vmap, jacrev, vjp
+from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
 
 
@@ -26,7 +26,7 @@ class FisherInfo:
             subspace_dip,
             valset: DataLoader,
             num_random_vecs: int = 10,
-            init_damping_fct: float = 1e-3,
+            initial_damping: float = 1e-3,
             mode: str = 'full'
         ):
 
@@ -35,7 +35,7 @@ class FisherInfo:
         self.matrix = self.init_fisher_info(
             valset=valset, mode=mode, num_random_vecs=num_random_vecs,
         )
-        self._damping_fct = init_damping_fct
+        self._damping = initial_damping
 
     @property
     def shape(self,
@@ -45,36 +45,67 @@ class FisherInfo:
         return (size, size)
 
     @property
-    def damping_fct(self):
-        return self._damping_fct
+    def damping(self):
+        return self._damping
 
-    @damping_fct.setter
-    def damping_fct(self, value):
-        self._damping_fct = value
-
-    def fvp(self, 
+    @damping.setter
+    def damping(self, value):
+        self._damping = value
+    
+    def ema_cvp(self, 
             v: Tensor,
             use_inverse: bool = False,
+            include_damping: bool = True,
+            include_Tikhonov_regularization: bool = True, 
             weight_decay: float = 0.
         ) -> Tensor:
         
         matrix = self._add_damping(matrix=self.matrix,
-            weight_decay=weight_decay
-            )
+            weight_decay=weight_decay if include_Tikhonov_regularization else 0., 
+            ) if include_damping else self.matrix
 
         return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
+
+    def exact_cvp(self,             
+            v: Tensor,
+            use_inverse: bool = False,
+            include_damping: bool = True,
+            include_Tikhonov_regularization: bool = True, 
+            weight_decay: float = 0.,
+            use_forward_op: bool = True) -> Tensor:
+
+            if use_inverse: 
+                raise NotImplementedError
+            
+            _fnet_single = partial(self._fnet_single,
+                use_forward_op=use_forward_op
+                )
+            
+            _, jvp_ = jvp(_fnet_single,
+                    (self.subspace_dip.subspace.parameters_vec,), (v,)
+                )
+            
+            _, _vjp_fn = vjp(_fnet_single,
+                        self.subspace_dip.subspace.parameters_vec
+                    )
+            out = _vjp_fn(jvp_)[0]
+
+            out += v * self.damping if include_damping else 0.
+            out += v * weight_decay if include_Tikhonov_regularization else 0.
+
+            return out
 
     def _add_damping(self,  
             matrix: Tensor,
             weight_decay: float = 0.,  
         ) -> Tensor:
 
-        matrix[np.diag_indices(matrix.shape[0])] += self.damping_fct + weight_decay
+        matrix[np.diag_indices(matrix.shape[0])] += self.damping + weight_decay
         return matrix
 
     def _fnet_single(self,
             parameters_vec: Tensor,
-            input: Tensor,
+            input: Optional[Tensor] = None,
             use_forward_op: bool = True
         ) -> Tensor:
 
@@ -163,12 +194,12 @@ class FisherInfo:
                 _, _vjp_fn = vjp(_fnet_single,
                         self.subspace_dip.subspace.parameters_vec
                     )
-
+                
                 def _single_vjp(v):
                     return _vjp_fn(v)[0]
-
+                
                 vJp = vmap(_single_vjp, in_dims=0)(v)
-                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs #* (np.prod(shape) / num_random_vecs)
+                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
                 per_inputs_fisher_list.append(matrix)
 
             per_inputs_fisher = torch.stack(per_inputs_fisher_list)
@@ -178,7 +209,7 @@ class FisherInfo:
 
     def update(self,
             tuneset: DataLoader,
-            mixing_factor: float = 0.45,
+            curvature_ema: float = 0.95,
             num_random_vecs: int = 10,
             use_forward_op: bool = True,
             mode: str = 'full'
@@ -195,9 +226,8 @@ class FisherInfo:
                 use_forward_op=use_forward_op,
                 num_random_vecs=num_random_vecs
             )
-        
         else:
             raise NotImplementedError
 
-        matrix = mixing_factor * self.matrix + (1. - mixing_factor) * update
+        matrix = curvature_ema * self.matrix + (1. - curvature_ema) * update
         self.matrix = matrix
