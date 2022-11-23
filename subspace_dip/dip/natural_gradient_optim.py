@@ -44,7 +44,8 @@ class NGD(Optimizer):
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
                     weight_decay=0, nesterov=nesterov, differentiable=differentiable)
         self.step_counter = 0
-        self.memory_buffer_list = [None]
+        self.old_step = None 
+        self.old_step_no_momentun = None
 
         super(NGD, self).__init__(params, defaults)
 
@@ -77,36 +78,33 @@ class NGD(Optimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
 
-            memory = ngd(params_with_grad,
+            old_step, old_step_no_momentun= ngd(params_with_grad,
                 d_p_list,
                 curvature,
                 weight_decay=group['weight_decay'],
                 lr=group['lr'],
                 momentum=group['momentum'],
-                nesterov=group['nesterov'],
                 use_adaptive_damping=use_adaptive_damping,
                 use_approximate_quad_model=use_approximate_quad_model, 
-                memory_buffer_list=self.memory_buffer_list,
+                old_step=self.old_step,
+                old_step_no_momentun=self.old_step_no_momentun,
                 step_counter=self.step_counter,
                 closure=closure, 
                 loss=loss
                 )
 
-        self.memory_buffer_list.append(memory)
-        if (len(self.memory_buffer_list) > max_length_memory) or (self.step_counter == 0):
-            self.memory_buffer_list.pop(0)
-
-
         self.step_counter += 1
+        self.old_step = old_step
+        self.old_step_no_momentun = old_step_no_momentun
 
 def ngd(params: List[Tensor],
         d_p_list: List[Tensor],
         curvature: FisherInfo,
         weight_decay: float,
         lr: float,
-        memory_buffer_list: List[Tensor],
+        old_step: Tensor,
+        old_step_no_momentun: Tensor, 
         momentum: float = 0.,
-        nesterov: bool = False, 
         use_adaptive_damping: bool = True,
         use_approximate_quad_model: bool = False, 
         min_damping: float = 1e-8,
@@ -153,11 +151,10 @@ def ngd(params: List[Tensor],
 
     func = _single_tensor_ngd
 
-    memory = func(params,
+    old_step, old_step_no_momentun= func(params,
         d_p_list,
         curvature=curvature,
         momentum=momentum,
-        nesterov=nesterov,
         weight_decay=weight_decay,
         lr=lr,
         use_adaptive_damping=use_adaptive_damping,
@@ -169,13 +166,14 @@ def ngd(params: List[Tensor],
         damping_lower_threshold=damping_lower_threshold,
         damping_upper_threshold=damping_upper_threshold,
         include_damping_in_quad_change=include_damping_in_quad_change,
-        memory_buffer_list=memory_buffer_list,
+        old_step=old_step,
+        old_step_no_momentun=old_step_no_momentun,
         step_counter=step_counter,
         closure=closure,
         loss=loss
         )
 
-    if use_adaptive_damping: return memory
+    return old_step, old_step_no_momentun
 
 def _quad_model(
         curvature: FisherInfo,
@@ -187,12 +185,12 @@ def _quad_model(
     ) -> Tuple[Tensor, Tensor]:
 
     if not use_approximate_quad_model:
-        A = delta @ curvature.exact_cvp(
+        A = delta @ curvature.exact_cvp( #TODO: improve efficiency
             delta,
             include_damping=include_damping_in_quad_change,
             weight_decay=weight_decay,
             use_inverse=False
-            ) 
+            )
     else:
         A = delta @ curvature.ema_cvp(
             delta,
@@ -221,15 +219,14 @@ def _compute_quadratic_model_value(
         use_approximate_quad_model=use_approximate_quad_model
         )
 
-    return .5*A + b
+    return A / 2 + b
 
 def _compute_new_damping_and_rho(
         curvature: FisherInfo, 
         closure: callable, 
         old_loss: Tensor, 
         param: Tensor,
-        d_p: Tensor,
-        negative_learning_rate: float,
+        old_step_no_momentun: Tensor,
         weight_decay: float,
         min_damping: float = 1e-8,
         max_damping: float = np.inf,
@@ -242,7 +239,7 @@ def _compute_new_damping_and_rho(
     ) -> Tuple[float,float]:
     
     # reduction ratio
-    delta = negative_learning_rate*d_p
+    delta = -old_step_no_momentun
     quad_change = _compute_quadratic_model_value(
         curvature=curvature, delta=delta, grads=param.grad, 
         include_damping_in_quad_change=include_damping_in_quad_change, 
@@ -264,15 +261,16 @@ def _compute_new_damping_and_rho(
     else:
         damping = current_damping
     damping = np.clip(damping, a_min=min_damping, a_max=max_damping)
-
+    print(rho)
+    print(damping)
     return damping
 
 def _single_tensor_ngd(params: List[Tensor],
         d_p_list: List[Tensor],
         curvature: FisherInfo,
-        memory_buffer_list: List[Tensor],
+        old_step: Tensor,
+        old_step_no_momentun: Tensor, 
         momentum: float = 0.,
-        nesterov: bool = False, 
         weight_decay: float = 0.,
         lr: float = 1e-3,
         use_adaptive_damping: bool = False,
@@ -295,7 +293,6 @@ def _single_tensor_ngd(params: List[Tensor],
         if use_adaptive_damping and ((step_counter + 1) % damping_adaptation_interval == 0):
 
             adaptive_damping_kwargs = {
-                'negative_learning_rate': -lr,
                 'weight_decay': weight_decay,
                 'damping_adaptation_interval': damping_adaptation_interval,
                 'damping_adaptation_decay': damping_adaptation_decay, 
@@ -312,7 +309,7 @@ def _single_tensor_ngd(params: List[Tensor],
                 closure=closure,
                 old_loss=loss,
                 param=param,
-                d_p=memory_buffer_list[-1],
+                old_step_no_momentun=old_step_no_momentun,
                 **adaptive_damping_kwargs
             )
             curvature.damping = new_damping
@@ -321,21 +318,16 @@ def _single_tensor_ngd(params: List[Tensor],
             d_p,
             weight_decay=weight_decay,
             use_inverse=True
-            )
+            ) # natural_grad = (F + (l + eta))^-1 @ nabla h 
         
         if momentum !=0:
-            buf = memory_buffer_list[-1]
-            if buf is None:
-                buf = torch.clone(d_p).detach()
+            if old_step is None:
+                old_step = lr*torch.clone(d_p).detach()
             else:
-                buf.mul_(momentum).add_(d_p, alpha=lr)
-            if nesterov:
-                d_p = d_p.add(buf, alpha=momentum)
-            else:
-                d_p = buf
-        else: 
-            d_p.mul_(lr)
+                old_step.mul_(momentum).add_(d_p, alpha=lr)
+            param.add_(old_step, alpha=-1)
+        else:
+            old_step = lr*d_p
+            param.add_(old_step, alpha=-1)
 
-        param.add_(d_p, alpha=-1)
-
-        return d_p
+        return old_step, lr*d_p

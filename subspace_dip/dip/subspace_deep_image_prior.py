@@ -163,8 +163,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
-                momentum=optim_kwargs['optim']['momentum'], 
-                nesterov=optim_kwargs['optim']['use_nesterov'], 
+                momentum=optim_kwargs['optim']['momentum'] 
                 )
         elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
             self.optimizer = torch.optim.LBFGS(

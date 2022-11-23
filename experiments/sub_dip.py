@@ -133,7 +133,6 @@ def coordinator(cfg : DictConfig) -> None:
             'optim':{
                 'lr': cfg.subspace.fine_tuning.optim.lr,
                 'momentum': cfg.subspace.fine_tuning.optim.momentum,
-                'use_nesterov': cfg.subspace.fine_tuning.optim.use_nesterov,
                 'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                 'gamma': cfg.subspace.fine_tuning.optim.gamma,
                 'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,

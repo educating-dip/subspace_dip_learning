@@ -11,16 +11,15 @@ fine_tuning:
   optim:
     optimizer: ngd
     lr: 1e-1
-    momentum: 0.
-    use_adaptive_damping: True
+    momentum: 0.9
+    use_adaptive_damping: False
     use_approximate_quad_model: False
-    use_nesterov: True
-    weight_decay: 1e-4
+    weight_decay: 1e-6
     gamma: 1e-4
 fisher_info:
   batch_size: 1
   num_random_vecs: 1
-  curvature_ema: 0.99
+  curvature_ema: 0.9
   initial_damping: 1
   mode: vjp_rank_one
   use_init_fisher_info_matrix: True
@@ -29,4 +28,4 @@ fisher_info:
     batch_size: 1
     optim:
       lr: 1e-3
-      weight_decay: 1e-4
+      weight_decay: 1e-6
