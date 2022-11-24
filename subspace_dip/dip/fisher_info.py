@@ -24,16 +24,16 @@ class FisherInfo:
 
     def __init__(self, 
             subspace_dip,
-            valset: DataLoader,
+            dataset: DataLoader,
             num_random_vecs: int = 10,
             initial_damping: float = 1e-3,
             mode: str = 'full'
         ):
 
         self.subspace_dip = subspace_dip
-        self.num_inputs_valset = len(valset)
+        self.num_inputs_dataset = len(dataset)
         self.matrix = self.init_fisher_info(
-            valset=valset, mode=mode, num_random_vecs=num_random_vecs,
+            dataset=dataset, mode=mode, num_random_vecs=num_random_vecs,
         )
         self._damping = initial_damping
 
@@ -117,24 +117,37 @@ class FisherInfo:
         return out
 
     def assemble_fisher_info(self, 
-            valset: DataLoader,
+            dataset: Optional[DataLoader] = None,
             use_forward_op: bool = True
         ) -> Tensor:
-    
-        _fnet_single = partial(self._fnet_single,
+        
+        def _per_input_full_update(fbp: Optional[Tensor] = None): 
+
+            _fnet_single = partial(self._fnet_single,
                 use_forward_op=use_forward_op
-            )
+                ) if fbp is not None else partial(self._fnet_single,
+                    inupt=None,
+                    use_forward_op=use_forward_op
+                    )
+            jac = vmap(
+                jacrev(_fnet_single), in_dims=(None, 0))(
+                    self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1) if fbp is not None else
+                        self.subspace_dip.subspace.parameters_vec
+                )
+            jac = jac.view(
+                    fbp.shape[0], #batch_size,
+                    -1, self.subspace_dip.subspace.num_subspace_params
+                ) # the inferred dim is im_shape: nn_model_output
+            return jac
+        
         with torch.no_grad():
             per_inputs_jac_list = []
-            for _, _, fbp in valset:
-                jac = vmap(
-                    jacrev(_fnet_single), in_dims=(None, 0))(
-                        self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1)
-                    )
-                jac = jac.view(
-                        fbp.shape[0], #batch_size,
-                        -1, self.subspace_dip.subspace.num_subspace_params
-                    ) # the inferred dim is im_shape: nn_model_output
+            if dataset is not None:
+                for _, _, fbp in dataset:
+                    jac = _per_input_full_update(fbp=fbp)
+                    per_inputs_jac_list.append(jac)
+            else:
+                jac = _per_input_full_update(fbp=None)
                 per_inputs_jac_list.append(jac)
 
             per_inputs_jac = torch.cat(per_inputs_jac_list)
@@ -148,7 +161,7 @@ class FisherInfo:
             return matrix
 
     def init_fisher_info(self,
-            valset: DataLoader,
+            dataset: Optional[DataLoader] = None,
             num_random_vecs: int = 100, 
             use_forward_op: bool = True,
             mode: str = 'full'
@@ -156,12 +169,12 @@ class FisherInfo:
         
         if mode == 'full':
             matrix = self.assemble_fisher_info(
-                valset=valset,
+                dataset=dataset,
                 use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
             matrix = self.random_assemble_fisher_info(                
-                valset=valset,
+                dataset=dataset,
                 num_random_vecs=num_random_vecs,
                 use_forward_op=use_forward_op
                 )
@@ -171,7 +184,7 @@ class FisherInfo:
         return matrix
 
     def random_assemble_fisher_info(self,
-        valset: DataLoader,
+        dataset: Optional[DataLoader] = None,
         num_random_vecs: int = 10,
         use_forward_op: bool = True
         ) -> Tensor:
@@ -181,25 +194,37 @@ class FisherInfo:
         else: 
             shape = self.subspace_dip.ray_trafo.obs_shape
 
+        def _per_input_rank_one_update(fbp: Optional[Tensor] = None): 
+            
+            v = torch.randn(
+                    (num_random_vecs, 1, 1, *shape), 
+                    device=self.subspace_dip.device
+                )
+
+            _fnet_single = partial(self._fnet_single,
+                input=fbp,
+                use_forward_op=use_forward_op
+                )
+            _, _vjp_fn = vjp(_fnet_single,
+                    self.subspace_dip.subspace.parameters_vec
+                )
+    
+            def _single_vjp(v):
+                return _vjp_fn(v)[0]
+            
+            vJp = vmap(_single_vjp, in_dims=0)(v)
+            matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
+
+            return matrix
+
         with torch.no_grad():
             per_inputs_fisher_list = []
-            for _, _, fbp in valset:
-                
-                v = torch.randn((num_random_vecs, 1, 1, *shape), device=self.subspace_dip.device)
-                
-                _fnet_single = partial(self._fnet_single,
-                    input=fbp,
-                    use_forward_op=use_forward_op
-                    )
-                _, _vjp_fn = vjp(_fnet_single,
-                        self.subspace_dip.subspace.parameters_vec
-                    )
-                
-                def _single_vjp(v):
-                    return _vjp_fn(v)[0]
-                
-                vJp = vmap(_single_vjp, in_dims=0)(v)
-                matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
+            if dataset is not None: 
+                for _, _, fbp in dataset:
+                    matrix = _per_input_rank_one_update(fbp=fbp)
+                    per_inputs_fisher_list.append(matrix)
+            else:
+                matrix = _per_input_rank_one_update(fbp=None)
                 per_inputs_fisher_list.append(matrix)
 
             per_inputs_fisher = torch.stack(per_inputs_fisher_list)
@@ -208,7 +233,7 @@ class FisherInfo:
         return matrix
 
     def update(self,
-            tuneset: DataLoader,
+            dataset: Optional[DataLoader] = None,
             curvature_ema: float = 0.95,
             num_random_vecs: int = 10,
             use_forward_op: bool = True,
@@ -217,12 +242,12 @@ class FisherInfo:
 
         if mode == 'full':
             update = self.assemble_fisher_info(
-                valset=tuneset, 
+                dataset=dataset, 
                 use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
             update = self.random_assemble_fisher_info(
-                valset=tuneset,
+                dataset=dataset,
                 use_forward_op=use_forward_op,
                 num_random_vecs=num_random_vecs
             )

@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import torch
 import numpy as np
 from torch import Tensor
@@ -57,49 +57,46 @@ class NGD(Optimizer):
     @_use_grad_for_differentiable
     def step(self, 
             curvature: FisherInfo,
+            curvature_kwargs: Dict, 
             use_adaptive_damping: bool = False,
             use_approximate_quad_model: bool = False,
             max_length_memory: int = 5,
-            closure=None, 
-            loss=None,
-        ):
+            closure=None,
+            ):
         
         """Performs a single optimization step.
         Args:
             curvature_matrix
         """
 
-        for group in self.param_groups:
-            params_with_grad = []
-            d_p_list = []
+        assert len(self.param_groups) == 1
+        group = self.param_groups[0]
+        params_with_grad = group['params'][0]
 
-            for p in group['params']:
-                if p.grad is not None:
-                    params_with_grad.append(p)
-                    d_p_list.append(p.grad)
-
-            old_step, old_step_no_momentun= ngd(params_with_grad,
-                d_p_list,
-                curvature,
-                weight_decay=group['weight_decay'],
-                lr=group['lr'],
-                momentum=group['momentum'],
-                use_adaptive_damping=use_adaptive_damping,
-                use_approximate_quad_model=use_approximate_quad_model, 
-                old_step=self.old_step,
-                old_step_no_momentun=self.old_step_no_momentun,
-                step_counter=self.step_counter,
-                closure=closure, 
-                loss=loss
-                )
+        old_step, old_step_no_momentun, loss, output = ngd(
+            params_with_grad=params_with_grad,
+            curvature=curvature,
+            curvature_kwargs=curvature_kwargs,
+            weight_decay=group['weight_decay'],
+            lr=group['lr'],
+            momentum=group['momentum'],
+            use_adaptive_damping=use_adaptive_damping,
+            use_approximate_quad_model=use_approximate_quad_model, 
+            old_step=self.old_step,
+            old_step_no_momentun=self.old_step_no_momentun,
+            step_counter=self.step_counter,
+            closure=closure
+            )
 
         self.step_counter += 1
         self.old_step = old_step
         self.old_step_no_momentun = old_step_no_momentun
 
-def ngd(params: List[Tensor],
-        d_p_list: List[Tensor],
+        return loss, output
+
+def ngd(params_with_grad: Tensor,
         curvature: FisherInfo,
+        curvature_kwargs: Dict,
         weight_decay: float,
         lr: float,
         old_step: Tensor,
@@ -108,15 +105,14 @@ def ngd(params: List[Tensor],
         use_adaptive_damping: bool = True,
         use_approximate_quad_model: bool = False, 
         min_damping: float = 1e-8,
-        max_damping: float = np.inf,
+        max_damping: float = 100.,
         damping_adaptation_interval: int = 5, 
         damping_adaptation_decay: float = 0.9,
         damping_lower_threshold: float = 0.25,
         damping_upper_threshold: float = 0.75,
-        include_damping_in_quad_change: bool = True,
+        include_damping_in_quad_change: bool = False,
         step_counter: int = 0, 
-        closure=None,
-        loss=None
+        closure=None
         ):
 
 
@@ -151,9 +147,10 @@ def ngd(params: List[Tensor],
 
     func = _single_tensor_ngd
 
-    old_step, old_step_no_momentun= func(params,
-        d_p_list,
+    old_step, old_step_no_momentun, loss, output = func(
+        params_with_grad=params_with_grad,
         curvature=curvature,
+        curvature_kwargs=curvature_kwargs, 
         momentum=momentum,
         weight_decay=weight_decay,
         lr=lr,
@@ -169,15 +166,96 @@ def ngd(params: List[Tensor],
         old_step=old_step,
         old_step_no_momentun=old_step_no_momentun,
         step_counter=step_counter,
-        closure=closure,
-        loss=loss
-        )
+        closure=closure
+    )
 
-    return old_step, old_step_no_momentun
+    return old_step, old_step_no_momentun, loss, output
 
-def _quad_model(
+def _single_tensor_ngd(
+        params_with_grad: Tensor,
         curvature: FisherInfo,
-        grads: Tensor,
+        curvature_kwargs: Dict,
+        old_step: Tensor,
+        old_step_no_momentun: Tensor, 
+        momentum: float = 0.,
+        weight_decay: float = 0.,
+        lr: float = 1e-3,
+        use_adaptive_damping: bool = False,
+        use_approximate_quad_model: bool = False, 
+        min_damping: float = 1e-8,
+        max_damping: float = 100.,
+        damping_adaptation_interval: int = 5,
+        damping_adaptation_decay: float = 0.9,
+        damping_lower_threshold: float = 0.25,
+        damping_upper_threshold: float = 0.75,
+        damping_adaptation_start: int = 100, 
+        include_damping_in_quad_change: bool = False,
+        closure = None,
+        step_counter: int = 0,
+        ):
+
+    # update curvature estimate
+    curvature.update(
+        **curvature_kwargs
+    )
+
+    # compute loss and proposed directions
+    with torch.enable_grad():
+        loss, output = closure(parameters_vec=params_with_grad)
+        loss.backward()
+    
+    proposed_descent_directions = params_with_grad.grad.detach()
+    natural_descent_directions = curvature.ema_cvp(
+        proposed_descent_directions,
+        weight_decay=weight_decay,
+        use_inverse=True
+    )
+    
+    # TODO:  compute the optimal coefficients
+
+    # Update parameters
+    if momentum !=0:
+        if old_step is None:
+            old_step = lr*torch.clone(natural_descent_directions).detach()
+        else:
+            old_step.mul_(momentum).add_(natural_descent_directions, alpha=lr)
+        params_with_grad.add_(old_step, alpha=-1)
+    else:
+        old_step = lr*natural_descent_directions
+        params_with_grad.add_(old_step, alpha=-1)
+
+    # Optionally compute the reduction ratio and update the damping
+    if ( use_adaptive_damping and 
+            ((step_counter + 1) % damping_adaptation_interval == 0) 
+                and step_counter > damping_adaptation_start):
+
+        adaptive_damping_kwargs = {
+            'weight_decay': weight_decay,
+            'damping_adaptation_interval': damping_adaptation_interval,
+            'damping_adaptation_decay': damping_adaptation_decay, 
+            'damping_lower_threshold': damping_lower_threshold,
+            'damping_upper_threshold': damping_upper_threshold,
+            'min_damping': min_damping, 
+            'max_damping': max_damping,
+            'use_approximate_quad_model': use_approximate_quad_model,
+            'include_damping_in_quad_change': include_damping_in_quad_change,
+            }
+        
+        new_damping = _compute_new_damping_and_rho(
+            curvature=curvature,
+            closure=closure,
+            old_loss=loss,
+            params_with_grad=params_with_grad,
+            old_step_no_momentun=lr*natural_descent_directions,
+            **adaptive_damping_kwargs
+        )
+        curvature.damping = new_damping
+
+    return old_step, lr*natural_descent_directions, loss.detach(), output.detach()
+
+def _solve_quad_model(
+        curvature: FisherInfo,
+        proposed_descent_directions: Tensor,
         delta: Tensor,
         weight_decay: float, 
         include_damping_in_quad_change: bool = True,
@@ -185,34 +263,35 @@ def _quad_model(
     ) -> Tuple[Tensor, Tensor]:
 
     if not use_approximate_quad_model:
-        A = delta @ curvature.exact_cvp( #TODO: improve efficiency
+        A = delta @ curvature.exact_cvp(
             delta,
             include_damping=include_damping_in_quad_change,
             weight_decay=weight_decay,
             use_inverse=False
-            )
+        )
     else:
         A = delta @ curvature.ema_cvp(
             delta,
             include_damping=include_damping_in_quad_change,
             weight_decay=weight_decay,
             use_inverse=False
-        ) 
-                
-    return A, grads @ delta
+        )
+
+    b = proposed_descent_directions @ delta
+    return (A, b)
     
 def _compute_quadratic_model_value(
         curvature: FisherInfo,
-        grads: Tensor,
+        proposed_descent_directions: Tensor,
         delta: Tensor,
         weight_decay: float, 
         include_damping_in_quad_change: bool = True,
         use_approximate_quad_model: bool = False
     ) -> Tensor:
 
-    A, b = _quad_model(
+    A, b = _solve_quad_model(
         curvature=curvature, 
-        grads=grads, 
+        proposed_descent_directions=proposed_descent_directions, 
         delta=delta, 
         weight_decay=weight_decay, 
         include_damping_in_quad_change=include_damping_in_quad_change,
@@ -225,11 +304,11 @@ def _compute_new_damping_and_rho(
         curvature: FisherInfo, 
         closure: callable, 
         old_loss: Tensor, 
-        param: Tensor,
+        params_with_grad: Tensor,
         old_step_no_momentun: Tensor,
         weight_decay: float,
         min_damping: float = 1e-8,
-        max_damping: float = np.inf,
+        max_damping: float = 100.,
         damping_adaptation_interval: int = 5, 
         damping_adaptation_decay: float = 0.95,
         damping_lower_threshold: float = 0.25,
@@ -241,12 +320,12 @@ def _compute_new_damping_and_rho(
     # reduction ratio
     delta = -old_step_no_momentun
     quad_change = _compute_quadratic_model_value(
-        curvature=curvature, delta=delta, grads=param.grad, 
+        curvature=curvature, delta=delta, proposed_descent_directions=params_with_grad.grad, 
         include_damping_in_quad_change=include_damping_in_quad_change, 
         weight_decay=weight_decay, use_approximate_quad_model=use_approximate_quad_model
     )
 
-    next_params = param + delta
+    next_params = params_with_grad + delta
     new_loss = closure(parameters_vec=next_params)[0]
     change_in_objecvitve = new_loss - old_loss
     rho = (change_in_objecvitve / quad_change).cpu().numpy()
@@ -261,73 +340,10 @@ def _compute_new_damping_and_rho(
     else:
         damping = current_damping
     damping = np.clip(damping, a_min=min_damping, a_max=max_damping)
-    print(rho)
+
+    print(rho_not_nan)
+    print(change_in_objecvitve)
+    print(quad_change)
     print(damping)
+
     return damping
-
-def _single_tensor_ngd(params: List[Tensor],
-        d_p_list: List[Tensor],
-        curvature: FisherInfo,
-        old_step: Tensor,
-        old_step_no_momentun: Tensor, 
-        momentum: float = 0.,
-        weight_decay: float = 0.,
-        lr: float = 1e-3,
-        use_adaptive_damping: bool = False,
-        use_approximate_quad_model: bool = False, 
-        min_damping: float = 1e-8,
-        max_damping: float = np.inf,
-        damping_adaptation_interval: int = 5,
-        damping_adaptation_decay: float = 0.9,
-        damping_lower_threshold: float = 0.25,
-        damping_upper_threshold: float = 0.75,
-        include_damping_in_quad_change: bool = False,
-        closure = None,
-        loss = None,
-        step_counter: int = 0,
-    ):
-
-    for i, param in enumerate(params):
-        d_p = d_p_list[i]
-
-        if use_adaptive_damping and ((step_counter + 1) % damping_adaptation_interval == 0):
-
-            adaptive_damping_kwargs = {
-                'weight_decay': weight_decay,
-                'damping_adaptation_interval': damping_adaptation_interval,
-                'damping_adaptation_decay': damping_adaptation_decay, 
-                'damping_lower_threshold': damping_lower_threshold,
-                'damping_upper_threshold': damping_upper_threshold,
-                'min_damping': min_damping, 
-                'max_damping': max_damping,
-                'use_approximate_quad_model': use_approximate_quad_model,
-                'include_damping_in_quad_change': include_damping_in_quad_change,
-                }
-            
-            new_damping = _compute_new_damping_and_rho(
-                curvature=curvature,
-                closure=closure,
-                old_loss=loss,
-                param=param,
-                old_step_no_momentun=old_step_no_momentun,
-                **adaptive_damping_kwargs
-            )
-            curvature.damping = new_damping
-
-        d_p = curvature.ema_cvp(
-            d_p,
-            weight_decay=weight_decay,
-            use_inverse=True
-            ) # natural_grad = (F + (l + eta))^-1 @ nabla h 
-        
-        if momentum !=0:
-            if old_step is None:
-                old_step = lr*torch.clone(d_p).detach()
-            else:
-                old_step.mul_(momentum).add_(d_p, alpha=lr)
-            param.add_(old_step, alpha=-1)
-        else:
-            old_step = lr*d_p
-            param.add_(old_step, alpha=-1)
-
-        return old_step, lr*d_p

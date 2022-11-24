@@ -102,7 +102,7 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
-            valset=valset,
+            dataset=valset,
             mode=cfg.subspace.fisher_info.mode,
             initial_damping=cfg.subspace.fisher_info.initial_damping
         )

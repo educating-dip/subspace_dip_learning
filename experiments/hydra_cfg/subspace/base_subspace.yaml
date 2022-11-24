@@ -10,17 +10,17 @@ fine_tuning:
   loss_function: mse
   optim:
     optimizer: ngd
-    lr: 1e-1
+    lr: 10
     momentum: 0.9
-    use_adaptive_damping: False
+    use_adaptive_damping: True
     use_approximate_quad_model: False
     weight_decay: 1e-6
     gamma: 1e-4
 fisher_info:
   batch_size: 1
   num_random_vecs: 1
-  curvature_ema: 0.9
-  initial_damping: 1
+  curvature_ema: 0.99
+  initial_damping: 100
   mode: vjp_rank_one
   use_init_fisher_info_matrix: True
   init_fisher_info_matrix:

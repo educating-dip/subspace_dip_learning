@@ -217,7 +217,10 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         p=self.singular_probabilities.cpu().numpy()
                     )
                 self.optimizer.zero_grad()
-                loss, output = self.objective(
+
+                if optim_kwargs['optim']['optimizer'] == 'adam':
+
+                    loss, output = self.objective(
                     criterion=criterion,
                     noisy_observation=noisy_observation,
                     use_tv_loss=use_tv_loss,
@@ -225,28 +228,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     slicing_sequence=slicing_sequence,
                     gamma=optim_kwargs['optim']['gamma']
                     )
-                loss.backward()
-
-                if loss.item() < min_loss_state['loss']:
-                    min_loss_state['loss'] = loss.item()
-                    min_loss_state['output'] = output.detach()
-                    min_loss_state['params_state_dict'] = self.subspace.state_dict()
-
-                if optim_kwargs['optim']['optimizer'] == 'adam':
+                    loss.backward()
                     self.optimizer.step()
+
                 elif optim_kwargs['optim']['optimizer'] == 'ngd':
-                    fisher_info.update(tuneset=DataLoader(
-                            torch.utils.data.TensorDataset(
-                                noisy_observation,
-                                filtbackproj,
-                                ground_truth
-                                )
-                            ),
-                        num_random_vecs=optim_kwargs['optim']['num_random_vecs'],
-                        curvature_ema=optim_kwargs['optim']['curvature_ema'], 
-                        use_forward_op=True,
-                        mode=optim_kwargs['optim']['mode']
-                    )
+
                     partial_closure = partial(self.objective, 
                         criterion=criterion,
                         noisy_observation=noisy_observation,
@@ -255,12 +241,20 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         slicing_sequence=slicing_sequence,
                         gamma=optim_kwargs['optim']['gamma']
                     )
-                    self.optimizer.step(
+
+                    curvature_update_kwargs = {
+                        'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
+                        'curvature_ema': optim_kwargs['optim']['curvature_ema'], 
+                        'use_forward_op': True,
+                        'mode': optim_kwargs['optim']['mode']
+                    }
+
+                    loss, output = self.optimizer.step(
                         curvature=fisher_info,
+                        curvature_kwargs=curvature_update_kwargs,
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
                         use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
-                        closure=partial_closure,
-                        loss=loss,
+                        closure=partial_closure
                     )
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
                     self.optimizer.step(
@@ -274,6 +268,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     )
                 else: 
                     raise NotImplementedError
+                                
+                if loss.item() < min_loss_state['loss']:
+                    min_loss_state['loss'] = loss.item()
+                    min_loss_state['output'] = output.detach()
+                    min_loss_state['params_state_dict'] = self.subspace.state_dict()
 
                 for p in self.nn_model.parameters():
                     p.data.clamp_(-1000, 1000) # MIN,MAX
