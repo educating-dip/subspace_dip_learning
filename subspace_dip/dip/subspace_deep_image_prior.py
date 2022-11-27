@@ -30,7 +30,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
     def __init__(self,
         subspace: LinearSubspace,
         ray_trafo: BaseRayTrafo,
-        state_dict: Optional[None] = None, 
+        state_dict: Optional[None] = None,
         torch_manual_seed: Union[int, None] = 1,
         device=None,
         net_kwargs=None,
@@ -60,7 +60,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         ) -> Tuple[Tensor]:
 
         weights = self.pretrained_weights
-        if slicing_sequence is None:
+        if slicing_sequence is None: # θ = γ(c) = θ_p + \sum_i c_i * u_i
             weights = weights + torch.inner(
                     self.subspace.parameters_vec if parameters_vec is None \
                         else parameters_vec, self.subspace.ortho_basis
@@ -79,7 +79,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             cnt += params.numel()
         return tuple(func_weights)
 
-    def set_nn_model_require_grad(self, set_require_grad: bool):
+    def set_nn_model_require_grad(self, set_require_grad: bool = False):
         for params in self.nn_model.parameters():
             params.requires_grad_(set_require_grad)
 
@@ -91,7 +91,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         ) -> Tensor:
 
         out = self.func_model_with_input(
-                self.get_func_params(
+                # θ = γ(c) = θ_p + \sum_i c_i * u_i
+                self.get_func_params( 
                     parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
                     slicing_sequence=slicing_sequence
                         ), 
@@ -163,12 +164,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
-                momentum=optim_kwargs['optim']['momentum'] 
+                momentum=optim_kwargs['optim']['momentum'],
+                adaptation_burn_in=optim_kwargs['optim']['adaptation_burn_in']
                 )
-        elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
-            self.optimizer = torch.optim.LBFGS(
-                [self.subspace.parameters_vec], lr=optim_kwargs['optim']['lr'],
-            )
         else: 
             raise NotImplementedError
 
@@ -253,18 +251,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         curvature=fisher_info,
                         curvature_kwargs=curvature_update_kwargs,
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
+                        use_adaptive_learning_rate_and_momentum=optim_kwargs['optim']['use_adaptive_learning_rate_and_momentum'],
                         use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
                         closure=partial_closure
-                    )
-                elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
-                    self.optimizer.step(
-                        lambda: self.objective(
-                            criterion=criterion,
-                            noisy_observation=noisy_observation,
-                            use_tv_loss=use_tv_loss,
-                            gamma=optim_kwargs['optim']['gamma'],
-                            return_output=False
-                        )
                     )
                 else: 
                     raise NotImplementedError

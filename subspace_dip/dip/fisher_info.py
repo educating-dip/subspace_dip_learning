@@ -9,38 +9,22 @@ from torch import Tensor
 from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
 
-
-def get_random_unit_probes(num_random_vecs, shape):
-
-    new_shape = (num_random_vecs, 1, 1, np.prod(shape))
-    v = torch.zeros(*new_shape)
-    randinds = torch.randperm(np.prod(shape))[:num_random_vecs]
-    v[range(len(randinds)), :, :, randinds] = 1.
-    v = v.reshape(num_random_vecs, 1, 1, *shape)
-    
-    return v
-
 class FisherInfo:
 
     def __init__(self, 
             subspace_dip,
-            dataset: DataLoader,
-            num_random_vecs: int = 10,
             initial_damping: float = 1e-3,
-            mode: str = 'full'
         ):
 
         self.subspace_dip = subspace_dip
-        self.num_inputs_dataset = len(dataset)
-        self.matrix = self.init_fisher_info(
-            dataset=dataset, mode=mode, num_random_vecs=num_random_vecs,
+        self.matrix = torch.eye(self.subspace_dip.subspace.num_subspace_params, 
+            device=self.subspace_dip.device
         )
         self._damping = initial_damping
 
     @property
     def shape(self,
             ) -> Tuple[int,int]:
-
         size = self.matrix.shape[0]
         return (size, size)
 
@@ -55,45 +39,47 @@ class FisherInfo:
     def ema_cvp(self, 
             v: Tensor,
             use_inverse: bool = False,
-            include_damping: bool = True,
-            include_Tikhonov_regularization: bool = True, 
-            weight_decay: float = 0.
+            use_square_root: bool = False, 
+            include_damping: bool = False, # include λ
+            include_Tikhonov_regularization: bool = False, # include η 
+            weight_decay: float = 0. # η
         ) -> Tensor:
-        
-        matrix = self._add_damping(matrix=self.matrix,
-            weight_decay=weight_decay if include_Tikhonov_regularization else 0., 
-            ) if include_damping else self.matrix
 
-        return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
+        matrix = self.matrix.clone() if (
+            include_damping or include_Tikhonov_regularization
+                ) else self.matrix
+    
+        if use_square_root: 
+            chol = torch.linalg.cholesky(matrix)
+            return chol @ v
+        else:
+            if include_damping:
+                matrix = self._add_damping(matrix=matrix) # add λ
+            if include_Tikhonov_regularization:
+                matrix[np.diag_indices(matrix.shape[0])] += weight_decay  # add η
+    
+            return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
 
     def exact_cvp(self,             
             v: Tensor,
-            use_inverse: bool = False,
-            include_damping: bool = True,
-            include_Tikhonov_regularization: bool = True, 
-            weight_decay: float = 0.,
-            use_forward_op: bool = True) -> Tensor:
+            use_forward_op: bool = True,
+            use_square_root: bool = False
+            ) -> Tensor:
 
-            if use_inverse: 
-                raise NotImplementedError
-            
             _fnet_single = partial(self._fnet_single,
                 use_forward_op=use_forward_op
                 )
-            
-            _, jvp_ = jvp(_fnet_single,
+            _, jvp_ = jvp(_fnet_single, 
                     (self.subspace_dip.subspace.parameters_vec,), (v,)
-                )
-            
-            _, _vjp_fn = vjp(_fnet_single,
-                        self.subspace_dip.subspace.parameters_vec
-                    )
-            out = _vjp_fn(jvp_)[0]
-
-            out += v * self.damping if include_damping else 0.
-            out += v * weight_decay if include_Tikhonov_regularization else 0.
-
-            return out
+                ) # jvp_ = v @ J_cT = v @ (UT JT AT)
+            if not use_square_root: 
+                _, _vjp_fn = vjp(_fnet_single,
+                            self.subspace_dip.subspace.parameters_vec
+                        )
+                Fv = _vjp_fn(jvp_)[0] # Fv = jvp_ @ J_c = jvp_ @ (A J U)
+            else: 
+                Fv = jvp_
+            return Fv
 
     def _add_damping(self,  
             matrix: Tensor,
@@ -160,7 +146,7 @@ class FisherInfo:
 
             return matrix
 
-    def init_fisher_info(self,
+    def initialise_fisher_info(self,
             dataset: Optional[DataLoader] = None,
             num_random_vecs: int = 100, 
             use_forward_op: bool = True,
@@ -180,8 +166,7 @@ class FisherInfo:
                 )
         else: 
             raise NotImplementedError
-
-        return matrix
+        self.matrix = matrix 
 
     def random_assemble_fisher_info(self,
         dataset: Optional[DataLoader] = None,
@@ -194,13 +179,24 @@ class FisherInfo:
         else: 
             shape = self.subspace_dip.ray_trafo.obs_shape
 
-        def _per_input_rank_one_update(fbp: Optional[Tensor] = None): 
-            
-            v = torch.randn(
-                    (num_random_vecs, 1, 1, *shape), 
-                    device=self.subspace_dip.device
-                )
+        def _per_input_rank_one_update(fbp: Optional[Tensor] = None):
 
+            def get_random_unit_probes(num_random_vecs, shape):
+
+                new_shape = (num_random_vecs, 1, 1, np.prod(shape))
+                v = torch.zeros(
+                        *new_shape, 
+                        device=self.subspace_dip.device
+                    )
+                randinds = torch.randperm(np.prod(shape))[:num_random_vecs]
+                v[range(len(randinds)), :, :, randinds] = 1.
+                v = v.reshape(num_random_vecs, 1, 1, *shape)
+                return v
+
+            v = get_random_unit_probes(
+                    num_random_vecs, shape, 
+                )            
+            
             _fnet_single = partial(self._fnet_single,
                 input=fbp,
                 use_forward_op=use_forward_op
@@ -208,12 +204,12 @@ class FisherInfo:
             _, _vjp_fn = vjp(_fnet_single,
                     self.subspace_dip.subspace.parameters_vec
                 )
-    
+            
             def _single_vjp(v):
                 return _vjp_fn(v)[0]
             
-            vJp = vmap(_single_vjp, in_dims=0)(v)
-            matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
+            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = v @ (U Jθ A)
+            matrix = torch.einsum('Np,Nc->pc', vJp, vJp) * np.prod(shape) / num_random_vecs
 
             return matrix
 

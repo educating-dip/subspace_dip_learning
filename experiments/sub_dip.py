@@ -62,7 +62,11 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
         )
 
-    fisher_info = None
+    fisher_info = FisherInfo(
+        subspace_dip=reconstructor,
+        initial_damping=cfg.subspace.fisher_info.initial_damping
+    )
+
     assert cfg.subspace.fine_tuning.optim.weight_decay == cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay
     if cfg.subspace.fine_tuning.optim.weight_decay != 0.: 
         print(f'using weight_decay: {cfg.subspace.fine_tuning.optim.weight_decay}')
@@ -97,14 +101,12 @@ def coordinator(cfg : DictConfig) -> None:
                 'log_path': './',
                 'torch_manual_seed': cfg.dip.torch_manual_seed
                 }
-        )
-
-        fisher_info = FisherInfo(
-            subspace_dip=reconstructor,
+            )
+        
+        fisher_info.initialise_fisher_info(
+            dataset=valset, 
             num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
-            dataset=valset,
             mode=cfg.subspace.fisher_info.mode,
-            initial_damping=cfg.subspace.fisher_info.initial_damping
         )
 
     dataset = get_standard_test_dataset(
@@ -139,6 +141,8 @@ def coordinator(cfg : DictConfig) -> None:
                 'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
                 'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
                 'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
+                'use_adaptive_learning_rate_and_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate_and_momentum,
+                'adaptation_burn_in': cfg.subspace.fine_tuning.optim.adaptation_burn_in,
                 'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
                 'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim,
