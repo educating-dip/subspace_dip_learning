@@ -165,7 +165,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
                 momentum=optim_kwargs['optim']['momentum'],
-                adaptation_burn_in=optim_kwargs['optim']['adaptation_burn_in']
+                quad_model_adaptation_thresh=optim_kwargs['optim']['quad_model_adaptation_thresh']
                 )
         else: 
             raise NotImplementedError
@@ -250,8 +250,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     loss, output = self.optimizer.step(
                         curvature=fisher_info,
                         curvature_kwargs=curvature_update_kwargs,
+                        use_adaptive_learning_rate=optim_kwargs['optim']['use_adaptive_learning_rate'],
+                        use_adaptive_momentum=optim_kwargs['optim']['use_adaptive_momentum'],
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
-                        use_adaptive_learning_rate_and_momentum=optim_kwargs['optim']['use_adaptive_learning_rate_and_momentum'],
                         use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
                         closure=partial_closure
                     )

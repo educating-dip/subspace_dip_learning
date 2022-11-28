@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from .utils import gramschmidt
 from subspace_dip.utils import get_original_cwd
 from subspace_dip.data import get_ellipses_dataset
-from subspace_dip.utils import PSNR
+from subspace_dip.utils import PSNR, tv_loss
 from subspace_dip.data import BaseRayTrafo
 
 class LinearSubspace(nn.Module):
@@ -178,7 +178,8 @@ class LinearSubspace(nn.Module):
                                 input=fbp, 
                                 use_forward_op=False
                             )
-                        loss = criterion(ray_trafo(outputs), observation)
+                        loss = criterion(ray_trafo(outputs), observation) 
+                        loss = loss + optim_kwargs['optim']['gamma']*tv_loss(outputs)
 
                         # backward
                         loss.backward()

@@ -1,0 +1,28 @@
+defaults:
+  - base_subspace
+
+fine_tuning:
+  optim:
+    optimizer: ngd
+    lr: 5
+    momentum: 0.9
+    use_adaptive_damping: True
+    use_adaptive_learning_rate: True
+    use_adaptive_momentum: True
+    quad_model_adaptation_thresh: 5e-6
+    use_approximate_quad_model: False
+fisher_info:
+  batch_size: 1
+  num_random_vecs: 100
+  curvature_ema: 0.9
+  init_damping: 100
+  mode: vjp_rank_one
+  use_init_fisher_info_matrix: True
+  init_fisher_info_matrix:
+    epochs: 1
+    batch_size: 1
+    num_random_vecs: 1
+    optim:
+      lr: 1e-3
+      weight_decay: 0
+      gamma: 1e-4

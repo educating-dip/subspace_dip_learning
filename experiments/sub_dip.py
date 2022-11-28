@@ -60,54 +60,54 @@ def coordinator(cfg : DictConfig) -> None:
         torch_manual_seed=cfg.dip.torch_manual_seed,
         device=device, 
         net_kwargs=net_kwargs
-        )
-
-    fisher_info = FisherInfo(
-        subspace_dip=reconstructor,
-        initial_damping=cfg.subspace.fisher_info.initial_damping
     )
 
-    assert cfg.subspace.fine_tuning.optim.weight_decay == cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay
-    if cfg.subspace.fine_tuning.optim.weight_decay != 0.: 
-        print(f'using weight_decay: {cfg.subspace.fine_tuning.optim.weight_decay}')
-        weight_decay = cfg.subspace.fine_tuning.optim.weight_decay
+    fisher_info = None 
+    if cfg.subspace.fine_tuning.optim.optimizer == 'ngd':
 
-    if (cfg.subspace.fine_tuning.optim.optimizer == 'ngd') and cfg.subspace.fisher_info.use_init_fisher_info_matrix:
-        valset = DataLoader(
-            get_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='test', 
-                im_size=cfg.source_dataset.im_size,
-                length=cfg.source_dataset.length.test, 
-                white_noise_rel_stddev=cfg.source_dataset.noise_stddev, 
-                use_fixed_seeds_starting_from=cfg.seed, 
-                device=device
-            ),
-            batch_size=cfg.subspace.fisher_info.batch_size,
-            shuffle=True
-        )
-
-        subspace.set_parameters_on_valset(       
+        fisher_info = FisherInfo(
             subspace_dip=reconstructor,
-            ray_trafo=ray_trafo,
-            valset=valset,
-            optim_kwargs={
-                'epochs': cfg.subspace.fisher_info.init_fisher_info_matrix.epochs, 
-                'batch_size': cfg.subspace.fisher_info.init_fisher_info_matrix.batch_size,
-                'optim':{
-                    'lr': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.lr,
-                    'weight_decay': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay
-                    },
-                'log_path': './',
-                'torch_manual_seed': cfg.dip.torch_manual_seed
-                }
-            )
-        
-        fisher_info.initialise_fisher_info(
-            dataset=valset, 
-            num_random_vecs=cfg.subspace.fisher_info.num_random_vecs,
-            mode=cfg.subspace.fisher_info.mode,
+            init_damping=cfg.subspace.fisher_info.init_damping,
         )
+
+        if cfg.subspace.fisher_info.use_init_fisher_info_matrix:
+
+            valset = DataLoader(
+                get_ellipses_dataset(
+                    ray_trafo=ray_trafo, 
+                    fold='test', 
+                    im_size=cfg.source_dataset.im_size,
+                    length=cfg.source_dataset.length.test, 
+                    white_noise_rel_stddev=cfg.source_dataset.noise_stddev, 
+                    use_fixed_seeds_starting_from=cfg.seed, 
+                    device=device
+                ),
+                batch_size=cfg.subspace.fisher_info.batch_size,
+                shuffle=True
+            )
+
+            subspace.set_parameters_on_valset(       
+                subspace_dip=reconstructor,
+                ray_trafo=ray_trafo,
+                valset=valset,
+                optim_kwargs={
+                    'epochs': cfg.subspace.fisher_info.init_fisher_info_matrix.epochs, 
+                    'batch_size': cfg.subspace.fisher_info.init_fisher_info_matrix.batch_size,
+                    'optim':{
+                        'lr': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.lr,
+                        'weight_decay': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay, 
+                        'gamma': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.gamma
+                        },
+                    'log_path': './',
+                    'torch_manual_seed': cfg.dip.torch_manual_seed
+                    }
+                )
+            
+            fisher_info.initialise_fisher_info(
+                dataset=valset, 
+                num_random_vecs=cfg.subspace.fisher_info.init_fisher_info_matrix.num_random_vecs,
+                mode=cfg.subspace.fisher_info.mode,
+            )
 
     dataset = get_standard_test_dataset(
         ray_trafo,
@@ -134,21 +134,25 @@ def coordinator(cfg : DictConfig) -> None:
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
                 'lr': cfg.subspace.fine_tuning.optim.lr,
-                'momentum': cfg.subspace.fine_tuning.optim.momentum,
                 'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                 'gamma': cfg.subspace.fine_tuning.optim.gamma,
-                'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                 'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
-                'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
-                'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
-                'use_adaptive_learning_rate_and_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate_and_momentum,
-                'adaptation_burn_in': cfg.subspace.fine_tuning.optim.adaptation_burn_in,
-                'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
+                'momentum': cfg.subspace.fine_tuning.optim.momentum,
                 'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
-                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim,
-                'mode': cfg.subspace.fisher_info.mode
-            }
+                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim
+                }
         }
+
+        if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': optim_kwargs['optim'].update({
+            'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
+            'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
+            'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
+            'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
+            'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
+            'quad_model_adaptation_thresh': cfg.subspace.fine_tuning.optim.quad_model_adaptation_thresh,
+            'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
+            'mode': cfg.subspace.fisher_info.mode
+            })
 
         subspace.init_parameters()
         recon = reconstructor.reconstruct(

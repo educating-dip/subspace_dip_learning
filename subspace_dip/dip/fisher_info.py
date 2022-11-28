@@ -9,40 +9,60 @@ from torch import Tensor
 from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
 
+class Damping:
+
+    def __init__(self, init_damping: float = 1e2):
+        self._damping = init_damping
+    
+    @property
+    def damping(self, ): 
+        return self._damping
+
+    @damping.setter
+    def damping(self, value): 
+        self._damping = value 
+
+    def add_damping(self,  
+            matrix: Tensor,
+            include_Tikhonov_regularization: bool = True,
+            weight_decay: float = 0.
+        ) -> Tensor:
+
+        matrix[np.diag_indices(matrix.shape[0])] += self.damping
+        if include_Tikhonov_regularization: 
+            matrix[np.diag_indices(matrix.shape[0])] += weight_decay
+
+        return matrix
+
+
 class FisherInfo:
 
     def __init__(self, 
             subspace_dip,
-            initial_damping: float = 1e-3,
+            init_damping: float = 1e-3,
         ):
 
         self.subspace_dip = subspace_dip
         self.matrix = torch.eye(self.subspace_dip.subspace.num_subspace_params, 
             device=self.subspace_dip.device
         )
-        self._damping = initial_damping
+        self.curvature_damping = Damping(
+                init_damping=init_damping, 
+            )
 
     @property
     def shape(self,
             ) -> Tuple[int,int]:
         size = self.matrix.shape[0]
         return (size, size)
-
-    @property
-    def damping(self):
-        return self._damping
-
-    @damping.setter
-    def damping(self, value):
-        self._damping = value
     
     def ema_cvp(self, 
             v: Tensor,
             use_inverse: bool = False,
             use_square_root: bool = False, 
             include_damping: bool = False, # include λ
-            include_Tikhonov_regularization: bool = False, # include η 
-            weight_decay: float = 0. # η
+            include_Tikhonov_regularization: bool = False, # include η
+            weight_decay: float = 0.
         ) -> Tensor:
 
         matrix = self.matrix.clone() if (
@@ -54,10 +74,9 @@ class FisherInfo:
             return chol @ v
         else:
             if include_damping:
-                matrix = self._add_damping(matrix=matrix) # add λ
-            if include_Tikhonov_regularization:
-                matrix[np.diag_indices(matrix.shape[0])] += weight_decay  # add η
-    
+                matrix = self.curvature_damping.add_damping(matrix=matrix, 
+                    include_Tikhonov_regularization=include_Tikhonov_regularization
+                ) # add λ
             return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
 
     def exact_cvp(self,             
@@ -81,14 +100,6 @@ class FisherInfo:
                 Fv = jvp_
             return Fv
 
-    def _add_damping(self,  
-            matrix: Tensor,
-            weight_decay: float = 0.,  
-        ) -> Tensor:
-
-        matrix[np.diag_indices(matrix.shape[0])] += self.damping + weight_decay
-        return matrix
-
     def _fnet_single(self,
             parameters_vec: Tensor,
             input: Optional[Tensor] = None,
@@ -106,24 +117,26 @@ class FisherInfo:
             dataset: Optional[DataLoader] = None,
             use_forward_op: bool = True
         ) -> Tensor:
-        
-        def _per_input_full_update(fbp: Optional[Tensor] = None): 
 
+        def _per_input_full_update(fbp: Optional[Tensor] = None): 
+                
             _fnet_single = partial(self._fnet_single,
                 use_forward_op=use_forward_op
-                ) if fbp is not None else partial(self._fnet_single,
-                    inupt=None,
-                    use_forward_op=use_forward_op
-                    )
-            jac = vmap(
-                jacrev(_fnet_single), in_dims=(None, 0))(
-                    self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1) if fbp is not None else
-                        self.subspace_dip.subspace.parameters_vec
+            )
+
+            if fbp is None:
+                jac = jacrev(
+                        _fnet_single
+                    )(self.subspace_dip.subspace.parameters_vec)
+            else:
+                jac = vmap(jacrev(_fnet_single), in_dims=(None, 0))(
+                    self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1)
                 )
+    
             jac = jac.view(
-                    fbp.shape[0], #batch_size,
-                    -1, self.subspace_dip.subspace.num_subspace_params
-                ) # the inferred dim is im_shape: nn_model_output
+                fbp.shape[0] if fbp is not None else 1, #batch_size,
+                -1, self.subspace_dip.subspace.num_subspace_params
+            ) # the inferred dim is im_shape: nn_model_output
             return jac
         
         with torch.no_grad():

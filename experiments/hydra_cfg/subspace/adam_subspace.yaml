@@ -1,0 +1,8 @@
+defaults:
+  - base_subspace
+
+fine_tuning:
+  optim:
+    optimizer: adam
+    lr: 1e-2
+    momentum: 0.

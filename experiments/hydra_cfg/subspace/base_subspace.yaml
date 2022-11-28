@@ -6,28 +6,8 @@ num_random_projs: null
 use_random_init: True
 ortho_basis_path: ./
 fine_tuning:
-  iterations: 20000
+  iterations: 5000
   loss_function: mse
   optim:
-    optimizer: ngd
-    lr: 10
-    momentum: 0.9
-    use_adaptive_damping: True
-    use_adaptive_learning_rate_and_momentum: True
-    adaptation_burn_in: 0
-    use_approximate_quad_model: True
-    weight_decay: 0
     gamma: 1e-4
-fisher_info:
-  batch_size: 1
-  num_random_vecs: 100
-  curvature_ema: 0.95
-  initial_damping: 100
-  mode: vjp_rank_one
-  use_init_fisher_info_matrix: False
-  init_fisher_info_matrix:
-    epochs: 5
-    batch_size: 1
-    optim:
-      lr: 1e-3
-      weight_decay: 0
+    weight_decay: 0
