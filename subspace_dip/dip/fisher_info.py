@@ -221,7 +221,7 @@ class FisherInfo:
             def _single_vjp(v):
                 return _vjp_fn(v)[0]
             
-            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = v @ (U Jθ A)
+            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = (U Jθ A) @ v
             matrix = torch.einsum('Np,Nc->pc', vJp, vJp) * np.prod(shape) / num_random_vecs
 
             return matrix

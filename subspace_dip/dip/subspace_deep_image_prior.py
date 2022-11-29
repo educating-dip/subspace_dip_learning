@@ -165,7 +165,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
                 momentum=optim_kwargs['optim']['momentum'],
-                quad_model_adaptation_thresh=optim_kwargs['optim']['quad_model_adaptation_thresh']
+                switch_quad_model_adaptation_interval=optim_kwargs['optim']['switch_quad_model_adaptation_interval'], 
+                scale_ball=optim_kwargs['optim']['scale_ball']
                 )
         else: 
             raise NotImplementedError
