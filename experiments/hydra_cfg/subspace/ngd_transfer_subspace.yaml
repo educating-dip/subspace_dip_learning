@@ -6,21 +6,20 @@ fine_tuning:
     optimizer: ngd
     lr: 1
     momentum: 0.9
-    use_adaptive_damping: False
-    use_adaptive_learning_rate: False
-    use_adaptive_momentum: False
+    use_adaptive_damping: True
+    use_adaptive_learning_rate: True
+    use_adaptive_momentum: True
     switch_quad_model_adaptation_interval: 20
-    scale_ball: 0.09
+    scale_ball: 0.025
     use_approximate_quad_model: False
 fisher_info:
   batch_size: 1
-  num_random_vecs: 100
-  curvature_ema: 0.
-  weight_decay: 0
-  init_damping: 1e-4
-  mode: full
-  return_stats: False
-  use_init_fisher_info_matrix: False
+  num_random_vecs: 5
+  curvature_ema: 0.95
+  init_damping: 1e-3
+  mode: vjp_rank_one
+  return_stats: True
+  use_init_fisher_info_matrix: True
   init_fisher_info_matrix:
     epochs: 1
     batch_size: 1

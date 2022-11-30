@@ -133,26 +133,28 @@ def coordinator(cfg : DictConfig) -> None:
             'iterations': cfg.subspace.fine_tuning.iterations,
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
-                'lr': cfg.subspace.fine_tuning.optim.lr,
-                'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
-                'gamma': cfg.subspace.fine_tuning.optim.gamma,
-                'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
-                'momentum': cfg.subspace.fine_tuning.optim.momentum,
-                'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
-                'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim
+                    'lr': cfg.subspace.fine_tuning.optim.lr,
+                    'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
+                    'gamma': cfg.subspace.fine_tuning.optim.gamma,
+                    'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
+                    'momentum': cfg.subspace.fine_tuning.optim.momentum,
+                    'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
+                    'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim
                 }
         }
 
-        if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': optim_kwargs['optim'].update({
-            'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
-            'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
-            'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
-            'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
-            'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
-            'switch_quad_model_adaptation_interval': cfg.subspace.fine_tuning.optim.switch_quad_model_adaptation_interval,
-            'scale_ball': cfg.subspace.fine_tuning.optim.scale_ball,
-            'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
-            'mode': cfg.subspace.fisher_info.mode
+        if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': optim_kwargs['optim'].update(
+            {
+                'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
+                'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
+                'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
+                'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
+                'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
+                'switch_quad_model_adaptation_interval': cfg.subspace.fine_tuning.optim.switch_quad_model_adaptation_interval,
+                'scale_ball': cfg.subspace.fine_tuning.optim.scale_ball,
+                'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
+                'mode': cfg.subspace.fisher_info.mode, 
+                'return_stats': cfg.subspace.fisher_info.return_stats
             })
 
         subspace.init_parameters()

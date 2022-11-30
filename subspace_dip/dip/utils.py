@@ -29,3 +29,7 @@ def gramschmidt(
                 dim=-1
             )
     return ortho_bases
+
+def stats_to_writer(stats, writer, step):
+    for key, value in stats.items():
+        writer.add_scalar(key, value, step)

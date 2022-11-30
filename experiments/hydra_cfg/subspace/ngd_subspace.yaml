@@ -10,14 +10,15 @@ fine_tuning:
     use_adaptive_learning_rate: True
     use_adaptive_momentum: True
     switch_quad_model_adaptation_interval: 20
-    scale_ball: 0.1
+    scale_ball: 0.01
     use_approximate_quad_model: False
 fisher_info:
   batch_size: 1
-  num_random_vecs: 100
-  curvature_ema: 0.9
+  num_random_vecs: 10
+  curvature_ema: 0.999
   init_damping: 100
   mode: vjp_rank_one
+  return_stats: True
   use_init_fisher_info_matrix: False
   init_fisher_info_matrix:
     epochs: 1

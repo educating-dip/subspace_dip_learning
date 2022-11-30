@@ -24,6 +24,7 @@ from .base_dip_image_prior import BaseDeepImagePrior
 from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfo
 from .natural_gradient_optim import NGD
+from .utils import stats_to_writer
 
 class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
@@ -201,7 +202,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         print('Pre-trained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
-
+        
+        optim_step_stats = None 
         with tqdm(range(
                 optim_kwargs['iterations']), desc='DIP', disable=not show_pbar
             ) as pbar:
@@ -248,14 +250,15 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         'mode': optim_kwargs['optim']['mode']
                     }
 
-                    loss, output = self.optimizer.step(
+                    loss, output, optim_step_stats = self.optimizer.step(
                         curvature=fisher_info,
                         curvature_kwargs=curvature_update_kwargs,
                         use_adaptive_learning_rate=optim_kwargs['optim']['use_adaptive_learning_rate'],
                         use_adaptive_momentum=optim_kwargs['optim']['use_adaptive_momentum'],
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
                         use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
-                        closure=partial_closure
+                        closure=partial_closure, 
+                        return_stats=optim_kwargs['optim']['return_stats']
                     )
                 else: 
                     raise NotImplementedError
@@ -267,7 +270,10 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
                 for p in self.nn_model.parameters():
                     p.data.clamp_(-1000, 1000) # MIN,MAX
-
+                
+                if optim_step_stats is not None: 
+                    stats_to_writer(optim_step_stats, writer, i)
+        
                 if ground_truth is not None:
                     min_loss_output_psnr = PSNR(
                             min_loss_state['output'].detach().cpu(), ground_truth.cpu())

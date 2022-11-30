@@ -6,7 +6,7 @@ num_random_projs: null
 use_random_init: True
 ortho_basis_path: ./
 fine_tuning:
-  iterations: 5000
+  iterations: 2000
   loss_function: mse
   optim:
     gamma: 1e-4
