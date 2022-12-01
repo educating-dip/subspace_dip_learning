@@ -9,4 +9,4 @@ from .parameter_sampler import ParameterSampler
 from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfo
 from .natural_gradient_optim import NGD
-from .utils import gramschmidt, stats_to_writer
+from .utils import gramschmidt, generate_random_unit_probes, stats_to_writer

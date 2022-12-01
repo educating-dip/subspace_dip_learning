@@ -8,6 +8,7 @@ from functools import partial
 from torch import Tensor
 from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
+from .utils import generate_random_unit_probes
 
 class Damping:
 
@@ -34,21 +35,22 @@ class Damping:
 
         return matrix
 
-
 class FisherInfo:
 
     def __init__(self, 
             subspace_dip,
             init_damping: float = 1e-3,
+            use_uniform_vjp_smpl_probs: bool = None
         ):
 
         self.subspace_dip = subspace_dip
         self.matrix = torch.eye(self.subspace_dip.subspace.num_subspace_params, 
             device=self.subspace_dip.device
         )
-        self.curvature_damping = Damping(
-                init_damping=init_damping, 
-            )
+        self.curvature_damping = Damping(init_damping=init_damping)
+        # first level proxy for AJU
+        row_norm = self.subspace_dip.ray_trafo.matrix.norm(dim=1)
+        self._vjp_smpl_probs = row_norm.cpu().numpy() / torch.sum(row_norm).cpu().numpy() if not use_uniform_vjp_smpl_probs else None 
 
     @property
     def shape(self,
@@ -194,21 +196,9 @@ class FisherInfo:
 
         def _per_input_rank_one_update(fbp: Optional[Tensor] = None):
 
-            def get_random_unit_probes(num_random_vecs, shape):
-
-                new_shape = (num_random_vecs, 1, 1, np.prod(shape))
-                v = torch.zeros(
-                        *new_shape, 
-                        device=self.subspace_dip.device
-                    )
-                randinds = torch.randperm(np.prod(shape))[:num_random_vecs]
-                v[range(len(randinds)), :, :, randinds] = 1.
-                v = v.reshape(num_random_vecs, 1, 1, *shape)
-                return v
-
-            v = get_random_unit_probes(
-                    num_random_vecs, shape, 
-                )            
+            v = generate_random_unit_probes(
+                num_random_vecs, shape, p=self._vjp_smpl_probs
+            ).to(device=self.subspace_dip.device)
             
             _fnet_single = partial(self._fnet_single,
                 input=fbp,
@@ -221,7 +211,7 @@ class FisherInfo:
             def _single_vjp(v):
                 return _vjp_fn(v)[0]
             
-            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = (U Jθ A) @ v
+            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = v.T @ (AJU)
             matrix = torch.einsum('Np,Nc->pc', vJp, vJp) * np.prod(shape) / num_random_vecs
 
             return matrix
@@ -262,6 +252,5 @@ class FisherInfo:
             )
         else:
             raise NotImplementedError
-
         matrix = curvature_ema * self.matrix + (1. - curvature_ema) * update
         self.matrix = matrix

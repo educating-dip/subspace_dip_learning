@@ -1,5 +1,6 @@
 import torch 
 import torch as Tensor
+import numpy as np 
 
 def gramschmidt(
         ortho_bases: Tensor, 
@@ -29,6 +30,22 @@ def gramschmidt(
                 dim=-1
             )
     return ortho_bases
+
+def generate_random_unit_probes(num_random_vecs, shape, p=None):
+
+    outer_dim = np.prod(shape)
+    new_shape = (num_random_vecs, 1, 1, outer_dim)
+    v = torch.zeros(*new_shape)
+    randinds = torch.randperm(
+        np.prod(shape))[:num_random_vecs] if p is None else np.random.choice(
+            outer_dim, 
+            size=num_random_vecs,
+            replace=False,
+            p=p
+        )
+    v[range(num_random_vecs), :, :, randinds] = 1.
+    v = v.reshape(num_random_vecs, 1, 1, *shape)
+    return v
 
 def stats_to_writer(stats, writer, step):
     for key, value in stats.items():
