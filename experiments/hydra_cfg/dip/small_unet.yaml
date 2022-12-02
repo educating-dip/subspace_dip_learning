@@ -7,7 +7,7 @@ net:
   sigmoid_saturation_thresh: 15
 optim:
   lr: 1e-4
-  iterations: 10000
+  iterations: 20000
   loss_function: mse
   gamma: 1e-4
   optimizer: adam

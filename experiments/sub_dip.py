@@ -150,7 +150,7 @@ def coordinator(cfg : DictConfig) -> None:
                 'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
                 'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
                 'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
-                'switch_quad_model_adaptation_interval': cfg.subspace.fine_tuning.optim.switch_quad_model_adaptation_interval,
+                'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
                 'scale_curvature': cfg.subspace.fine_tuning.optim.scale_curvature,
                 'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
                 'mode': cfg.subspace.fisher_info.mode, 

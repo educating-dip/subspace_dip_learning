@@ -9,7 +9,7 @@ fine_tuning:
     use_adaptive_damping: True
     use_adaptive_learning_rate: True
     use_adaptive_momentum: True
-    switch_quad_model_adaptation_interval: 20
+    stats_interval: 20
     scale_ball: 0.025
     use_approximate_quad_model: False
 fisher_info:

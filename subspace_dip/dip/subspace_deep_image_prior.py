@@ -166,7 +166,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
                 momentum=optim_kwargs['optim']['momentum'],
-                switch_quad_model_adaptation_interval=optim_kwargs['optim']['switch_quad_model_adaptation_interval'], 
+                stats_interval=optim_kwargs['optim']['stats_interval'], 
                 scale_curvature=optim_kwargs['optim']['scale_curvature']
                 )
         else: 

@@ -35,7 +35,7 @@ def _use_grad_for_differentiable(func):
 class NGD(Optimizer):
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
-                    weight_decay=0, switch_quad_model_adaptation_interval=0, scale_curvature=0., differentiable=False):
+                    weight_decay=0, stats_interval=0, scale_curvature=0., differentiable=False):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if weight_decay < 0.0:
@@ -43,11 +43,10 @@ class NGD(Optimizer):
 
         defaults = dict(lr=lr, momentum=momentum, 
                     dampening=dampening, weight_decay=0, 
-                    switch_quad_model_adaptation_interval=switch_quad_model_adaptation_interval,
+                    stats_interval=stats_interval,
                     scale_curvature=scale_curvature, differentiable=differentiable)
         self.step_counter = 0
         self.old_step = None 
-        self.use_quad_model_adaptation = False
 
         super(NGD, self).__init__(params, defaults)
 
@@ -78,16 +77,15 @@ class NGD(Optimizer):
         group = self.param_groups[0]
         params_with_grad = group['params'][0]
 
-        step, use_quad_model_adaptation, loss, output, stats = ngd(
+        step, loss, output, stats = ngd(
             params_with_grad=params_with_grad,
             curvature=curvature,
             curvature_kwargs=curvature_kwargs,
             lr=group['lr'],
             momentum=group['momentum'],
             weight_decay=group['weight_decay'],
-            switch_quad_model_adaptation_interval=group['switch_quad_model_adaptation_interval'],
+            stats_interval=group['stats_interval'],
             scale_curvature=group['scale_curvature'],
-            use_quad_model_adaptation=self.use_quad_model_adaptation,
             use_adaptive_learning_rate=use_adaptive_learning_rate,
             use_adaptive_momentum=use_adaptive_momentum,
             use_adaptive_damping=use_adaptive_damping,
@@ -100,7 +98,6 @@ class NGD(Optimizer):
         
         self.step_counter += 1
         self.old_step = step
-        self.use_quad_model_adaptation = use_quad_model_adaptation
 
         return loss, output, stats
 
@@ -111,9 +108,8 @@ def ngd(params_with_grad: Tensor,
         lr: float = 0.1,
         momentum: float = 0.,
         weight_decay: float = 0.,
-        switch_quad_model_adaptation_interval: int = 20,
+        stats_interval: int = 20,
         scale_curvature: float = 1., 
-        use_quad_model_adaptation: bool = False,
         use_adaptive_learning_rate: bool = False,
         use_adaptive_momentum: bool = False,
         use_adaptive_damping: bool = False,
@@ -138,9 +134,8 @@ def ngd(params_with_grad: Tensor,
         lr=lr,
         momentum=momentum,
         weight_decay=weight_decay,
-        switch_quad_model_adaptation_interval=switch_quad_model_adaptation_interval,
+        stats_interval=stats_interval,
         scale_curvature=scale_curvature,
-        use_quad_model_adaptation=use_quad_model_adaptation,
         use_adaptive_learning_rate=use_adaptive_learning_rate,
         use_adaptive_momentum=use_adaptive_momentum,
         use_adaptive_damping=use_adaptive_damping,
@@ -166,10 +161,9 @@ def _single_tensor_ngd(
         old_step: Tensor,
         momentum: float = 0.,
         lr: float = 0.1,
-        weight_decay: float = 0.,#
-        switch_quad_model_adaptation_interval: int = 20,
+        weight_decay: float = 0.,
+        stats_interval: int = 20,
         scale_curvature: float = 1., 
-        use_quad_model_adaptation: bool = False,
         use_adaptive_learning_rate: bool = False,
         use_adaptive_momentum: bool = False,
         use_adaptive_damping: bool = False,
@@ -215,12 +209,22 @@ def _single_tensor_ngd(
     if old_step is None: 
         old_step = torch.zeros_like(natural_descent_directions) + 1e-6
     
-    if use_adaptive_learning_rate and use_quad_model_adaptation:
+    if use_adaptive_learning_rate:
 
-        scale_curvature = np.clip(
-            scale_curvature*(1 + scale_curvature_growth_fct)**step_counter, 
-                a_min=-np.inf, a_max=1)
+        def scale_curvature_scheduler(
+                step_counter: int,
+                init_scale_curvature: float, 
+                scale_curvature_decay: float = 0.99999, 
+                thresh: float = 0.99
+                ):
 
+            scale_curvature = 1-scale_curvature_decay**step_counter + init_scale_curvature*scale_curvature_decay**(step_counter)
+            return scale_curvature
+
+        scale_curvature = scale_curvature_scheduler(
+            init_scale_curvature=scale_curvature, 
+            step_counter=step_counter)
+        
         lr, momentum = _compute_the_optimal_coefficients_via_quad_model(
             curvature=curvature,
             descent_directions=descent_directions,
@@ -239,7 +243,7 @@ def _single_tensor_ngd(
     params_with_grad.add_(step, alpha=1) # update parameters c + 𝛿
 
     # Optionally compute the reduction ratio and update the damping
-    if use_adaptive_damping and ((step_counter + 1) % damping_adaptation_interval == 0) and use_quad_model_adaptation:
+    if use_adaptive_damping and ((step_counter + 1) % damping_adaptation_interval == 0):
 
         adaptive_damping_kwargs = {
             'weight_decay': weight_decay,
@@ -263,22 +267,8 @@ def _single_tensor_ngd(
         )
         curvature.curvature_damping.damping = damping
 
-    # switching to adaptively change lr, momentum and damping via quadratic model
-    if (step_counter + 1) % switch_quad_model_adaptation_interval == 0 and not use_quad_model_adaptation:
-        𝛿TF𝛿, tangent_plane = _get_quad_model(
-            curvature=curvature,
-            descent_directions=descent_directions,
-            step=step,
-            weight_decay=weight_decay,
-            use_approximate_quad_model=True,
-            scale_curvature=scale_curvature
-        )
-        quad_change = (𝛿TF𝛿 / 2 + tangent_plane).item()
-        if quad_change < 0:
-            use_quad_model_adaptation = True
-
     stats = None
-    if return_stats and (step_counter + 1) % switch_quad_model_adaptation_interval == 0:
+    if return_stats and (step_counter + 1) % stats_interval == 0:
         eigs = torch.linalg.eigvalsh(curvature.matrix)
         stats = {
             'rho': rho if 'rho' in locals() else 0.,
@@ -293,8 +283,8 @@ def _single_tensor_ngd(
             'curvature_max_eig': eigs.max().item()
         }
 
-    outs = (step, use_quad_model_adaptation, loss.detach(), output.detach(), None) if not return_stats \
-                else (step, use_quad_model_adaptation, loss.detach(), output.detach(), stats)
+    outs = (step, loss.detach(), output.detach(), None) if not return_stats \
+                else (step, loss.detach(), output.detach(), stats)
     
     return outs
 

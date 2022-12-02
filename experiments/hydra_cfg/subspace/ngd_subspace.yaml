@@ -9,13 +9,13 @@ fine_tuning:
     use_adaptive_damping: True
     use_adaptive_learning_rate: True
     use_adaptive_momentum: True
-    switch_quad_model_adaptation_interval: 20
-    scale_curvature: 0.005
+    stats_interval: 20
+    scale_curvature: 0.001
     use_approximate_quad_model: False
 fisher_info:
   batch_size: 1
   num_random_vecs: 10
-  curvature_ema: 0.95
+  curvature_ema: 0.9
   init_damping: 100
   mode: vjp_rank_one
   return_stats: True
