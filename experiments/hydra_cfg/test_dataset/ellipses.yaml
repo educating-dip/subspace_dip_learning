@@ -1,7 +1,7 @@
 name: ellipses
-im_size: 64
+im_size: 128
 length: 
   train: 32000
   validation: 3200
-  test: 1024
+  test: 128
 noise_stddev: 0.05

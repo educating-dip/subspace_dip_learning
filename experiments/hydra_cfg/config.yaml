@@ -5,6 +5,7 @@ defaults:
   - dip: small_unet
   - sampler: base_sampler
   - subspace: base_subspace
+  - val: base_val
 seed: 1
 num_images: 1
 load_dip_models_from_path: null

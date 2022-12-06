@@ -170,7 +170,7 @@ def _single_tensor_ngd(
         use_approximate_quad_model: bool = False, 
         min_damping: float = 0,
         max_damping: float = 100.,
-        max_lr: float = 50., 
+        max_lr: float = 100., 
         min_lr: float = - np.inf, 
         max_momentum: float = 1., 
         min_momentum: float = -np.inf, 
@@ -211,18 +211,22 @@ def _single_tensor_ngd(
     
     if use_adaptive_learning_rate:
 
-        def scale_curvature_scheduler(
-                step_counter: int,
-                init_scale_curvature: float, 
-                scale_curvature_decay: float = 0.99999, 
-                thresh: float = 0.99
-                ):
+        def scale_scheduler(
+            step_counter: int,
+            init_value: float, 
+            decay_rate: float = 0.9999
+            ):
 
-            scale_curvature = 1-scale_curvature_decay**step_counter + init_scale_curvature*scale_curvature_decay**(step_counter)
-            return scale_curvature
+            def thresh_op(x, thresh=0.2):
+                logical = x > thresh
+                not_logical = not logical 
+                return 1 * logical +  x * not_logical
 
-        scale_curvature = scale_curvature_scheduler(
-            init_scale_curvature=scale_curvature, 
+            scale = 1 - decay_rate**step_counter + init_value*decay_rate**step_counter
+            return thresh_op(scale)
+
+        scale_curvature = scale_scheduler(
+            init_value=scale_curvature, 
             step_counter=step_counter)
         
         lr, momentum = _compute_the_optimal_coefficients_via_quad_model(
@@ -236,7 +240,6 @@ def _single_tensor_ngd(
         )
         lr = np.clip(lr, a_min=min_lr, a_max=max_lr)
         momentum = np.clip(momentum, a_min=min_momentum, a_max=max_momentum)
-
     
     # compute delta and return velocities, old_step, a.k.a 𝛿 = -lr*F^-1 ∇h + μ*v
     step = -lr*natural_descent_directions + momentum * old_step
@@ -269,18 +272,14 @@ def _single_tensor_ngd(
 
     stats = None
     if return_stats and (step_counter + 1) % stats_interval == 0:
-        eigs = torch.linalg.eigvalsh(curvature.matrix)
         stats = {
             'rho': rho if 'rho' in locals() else 0.,
-            'quad_change': quad_change if 'quad_change' in locals() else 0.,
             'model_change': change if 'change' in locals() else 0.,
             'curvature_damping': curvature.curvature_damping.damping,
             'lr': lr, 
             'momentum': momentum if hasattr(momentum, 'item') else momentum,
             'descent_directions': descent_directions.pow(2).sum().item(),
-            'natural_descent_directions_norm': natural_descent_directions.pow(2).sum().item(),
-            'curvature_min_eig': eigs.min().item(),
-            'curvature_max_eig': eigs.max().item()
+            'natural_descent_directions_norm': natural_descent_directions.pow(2).sum().item()
         }
 
     outs = (step, loss.detach(), output.detach(), None) if not return_stats \

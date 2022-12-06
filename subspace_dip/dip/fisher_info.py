@@ -40,24 +40,30 @@ class FisherInfo:
     def __init__(self, 
             subspace_dip,
             init_damping: float = 1e-3,
-            use_uniform_vjp_smpl_probs: bool = None
+            use_uniform_vjp_smpl_probs: bool = False
         ):
 
         self.subspace_dip = subspace_dip
         self.matrix = torch.eye(self.subspace_dip.subspace.num_subspace_params, 
             device=self.subspace_dip.device
         )
+        self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
-        # first level proxy for AJU
-        row_norm = self.subspace_dip.ray_trafo.matrix.norm(dim=1)
-        self._vjp_smpl_probs = row_norm.cpu().numpy() / torch.sum(row_norm).cpu().numpy() if not use_uniform_vjp_smpl_probs else None 
+        row_norm = self.subspace_dip.ray_trafo.matrix.norm(dim=1).cpu().numpy()
+        norm_const = np.sum(row_norm) 
+        self._vjp_smpl_probs = row_norm/norm_const if not use_uniform_vjp_smpl_probs else None # first level proxy for AJU
 
     @property
     def shape(self,
             ) -> Tuple[int,int]:
         size = self.matrix.shape[0]
         return (size, size)
-    
+
+    def reset_fisher_matrix(self, ) -> None:
+        self.matrix = self.init_matrix.clone() if self.init_matrix is not None else torch.eye(self.subspace_dip.subspace.num_subspace_params, 
+            device=self.subspace_dip.device
+        )
+
     def ema_cvp(self, 
             v: Tensor,
             use_inverse: bool = False,
@@ -181,7 +187,8 @@ class FisherInfo:
                 )
         else: 
             raise NotImplementedError
-        self.matrix = matrix 
+        self.matrix = matrix
+        self.init_matrix = matrix.clone()
 
     def random_assemble_fisher_info(self,
         dataset: Optional[DataLoader] = None,

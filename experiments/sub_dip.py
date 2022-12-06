@@ -158,6 +158,7 @@ def coordinator(cfg : DictConfig) -> None:
             })
 
         subspace.init_parameters()
+        fisher_info.reset_fisher_matrix()
         recon = reconstructor.reconstruct(
             noisy_observation=observation,
             filtbackproj=filtbackproj,
