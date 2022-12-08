@@ -8,7 +8,7 @@ from functools import partial
 from torch import Tensor
 from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
-from .utils import generate_random_unit_probes
+from .utils import get_scaled_random_unit_probes
 
 class Damping:
 
@@ -40,7 +40,6 @@ class FisherInfo:
     def __init__(self, 
             subspace_dip,
             init_damping: float = 1e-3,
-            use_uniform_vjp_smpl_probs: bool = False
         ):
 
         self.subspace_dip = subspace_dip
@@ -49,9 +48,12 @@ class FisherInfo:
         )
         self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
-        row_norm = self.subspace_dip.ray_trafo.matrix.norm(dim=1).cpu().numpy()
-        norm_const = np.sum(row_norm) 
-        self._vjp_smpl_probs = row_norm/norm_const if not use_uniform_vjp_smpl_probs else None # first level proxy for AJU
+
+        # importance sampling strategy
+        trafo = self.subspace_dip.ray_trafo.matrix
+        row_unnorm_p = trafo.norm(dim=1).pow(2)
+        norm_const = row_unnorm_p.sum()
+        self._vjp_smpl_probs = row_unnorm_p/norm_const
 
     @property
     def shape(self,
@@ -60,9 +62,8 @@ class FisherInfo:
         return (size, size)
 
     def reset_fisher_matrix(self, ) -> None:
-        self.matrix = self.init_matrix.clone() if self.init_matrix is not None else torch.eye(self.subspace_dip.subspace.num_subspace_params, 
-            device=self.subspace_dip.device
-        )
+        self.matrix = self.init_matrix.clone() if self.init_matrix is not None else torch.eye(
+            self.subspace_dip.subspace.num_subspace_params, device=self.subspace_dip.device)
 
     def ema_cvp(self, 
             v: Tensor,
@@ -188,7 +189,7 @@ class FisherInfo:
         else: 
             raise NotImplementedError
         self.matrix = matrix
-        self.init_matrix = matrix.clone()
+        self.init_matrix = matrix
 
     def random_assemble_fisher_info(self,
         dataset: Optional[DataLoader] = None,
@@ -203,10 +204,8 @@ class FisherInfo:
 
         def _per_input_rank_one_update(fbp: Optional[Tensor] = None):
 
-            v = generate_random_unit_probes(
-                num_random_vecs, shape, p=self._vjp_smpl_probs
-            ).to(device=self.subspace_dip.device)
-            
+            v = get_scaled_random_unit_probes(num_random_vecs,
+                    shape, device=self.subspace_dip.device, p=self._vjp_smpl_probs)
             _fnet_single = partial(self._fnet_single,
                 input=fbp,
                 use_forward_op=use_forward_op
@@ -214,12 +213,12 @@ class FisherInfo:
             _, _vjp_fn = vjp(_fnet_single,
                     self.subspace_dip.subspace.parameters_vec
                 )
-            
+
             def _single_vjp(v):
                 return _vjp_fn(v)[0]
-            
-            vJp = vmap(_single_vjp, in_dims=0)(v) # vJp = v.T @ (AJU)
-            matrix = torch.einsum('Np,Nc->pc', vJp, vJp) * np.prod(shape) / num_random_vecs
+
+            vJp = vmap(_single_vjp, in_dims=0)(v) #vJp = v.T@(AJU)
+            matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
 
             return matrix
 
