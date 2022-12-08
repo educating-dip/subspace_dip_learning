@@ -51,7 +51,7 @@ class FisherInfo:
 
         # importance sampling strategy
         trafo = self.subspace_dip.ray_trafo.matrix
-        row_unnorm_p = trafo.norm(dim=1).pow(2)
+        row_unnorm_p = torch.linalg.norm(trafo, dim=1, ord=2).pow(2)
         norm_const = row_unnorm_p.sum()
         self._vjp_smpl_probs = row_unnorm_p/norm_const
 
@@ -84,8 +84,9 @@ class FisherInfo:
         else:
             if include_damping:
                 matrix = self.curvature_damping.add_damping(matrix=matrix, 
-                    include_Tikhonov_regularization=include_Tikhonov_regularization
-                ) # add λ
+                    include_Tikhonov_regularization=include_Tikhonov_regularization, 
+                    weight_decay=weight_decay
+                ) # add λ and η
             return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
 
     def exact_cvp(self,             
@@ -122,17 +123,14 @@ class FisherInfo:
             )
         return out
 
-    def assemble_fisher_info(self, 
+    def deterministic_empirical_fisher(self, 
             dataset: Optional[DataLoader] = None,
             use_forward_op: bool = True
         ) -> Tensor:
 
-        def _per_input_full_update(fbp: Optional[Tensor] = None): 
+        def _per_input_deterministic_update(fbp: Optional[Tensor] = None): 
                 
-            _fnet_single = partial(self._fnet_single,
-                use_forward_op=use_forward_op
-            )
-
+            _fnet_single = partial(self._fnet_single,use_forward_op=use_forward_op)
             if fbp is None:
                 jac = jacrev(
                         _fnet_single
@@ -142,29 +140,24 @@ class FisherInfo:
                     self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1)
                 )
     
-            jac = jac.view(
-                fbp.shape[0] if fbp is not None else 1, #batch_size,
-                -1, self.subspace_dip.subspace.num_subspace_params
-            ) # the inferred dim is im_shape: nn_model_output
-            return jac
+            jac = jac.view(fbp.shape[0] if fbp is not None else 1, #batch_size,
+                    -1, self.subspace_dip.subspace.num_subspace_params
+                ) # the inferred dim is im_shape: nn_model_output
+            return jac # (batch_size, nn_model_output, num_subspace_params)
         
         with torch.no_grad():
             per_inputs_jac_list = []
             if dataset is not None:
                 for _, _, fbp in dataset:
-                    jac = _per_input_full_update(fbp=fbp)
+                    jac = _per_input_deterministic_update(fbp=fbp)
                     per_inputs_jac_list.append(jac)
             else:
-                jac = _per_input_full_update(fbp=None)
+                jac = _per_input_deterministic_update(fbp=None)
                 per_inputs_jac_list.append(jac)
 
             per_inputs_jac = torch.cat(per_inputs_jac_list)
-            matrix = torch.mean(
-                torch.einsum(
-                    'Nop,Noc->Npc',
-                    per_inputs_jac, 
-                    per_inputs_jac),
-                        dim=0)
+            # same as (per_inputs_jac.mT @ per_inputs_jac).mean(dim=0)
+            matrix = torch.mean(torch.einsum('Nop,Noc->Npc', per_inputs_jac, per_inputs_jac), dim=0)
 
             return matrix
 
@@ -176,22 +169,19 @@ class FisherInfo:
         ) -> Tensor:
         
         if mode == 'full':
-            matrix = self.assemble_fisher_info(
-                dataset=dataset,
+            matrix = self.deterministic_empirical_fisher(dataset=dataset,
                 use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
-            matrix = self.random_assemble_fisher_info(                
-                dataset=dataset,
-                num_random_vecs=num_random_vecs,
-                use_forward_op=use_forward_op
-                )
+            matrix = self.random_empirical_fisher(dataset=dataset,
+                num_random_vecs=num_random_vecs, use_forward_op=use_forward_op
+            )
         else: 
             raise NotImplementedError
         self.matrix = matrix
         self.init_matrix = matrix
 
-    def random_assemble_fisher_info(self,
+    def random_empirical_fisher(self,
         dataset: Optional[DataLoader] = None,
         num_random_vecs: int = 10,
         use_forward_op: bool = True
@@ -240,21 +230,18 @@ class FisherInfo:
     def update(self,
             dataset: Optional[DataLoader] = None,
             curvature_ema: float = 0.95,
-            num_random_vecs: int = 10,
+            num_random_vecs: Optional[int] = 10,
             use_forward_op: bool = True,
             mode: str = 'full'
         ) -> None:
 
         if mode == 'full':
-            update = self.assemble_fisher_info(
-                dataset=dataset, 
-                use_forward_op=use_forward_op
+            update = self.deterministic_empirical_fisher(
+                dataset=dataset, use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
-            update = self.random_assemble_fisher_info(
-                dataset=dataset,
-                use_forward_op=use_forward_op,
-                num_random_vecs=num_random_vecs
+            update = self.random_empirical_fisher(dataset=dataset,
+                use_forward_op=use_forward_op, num_random_vecs=num_random_vecs
             )
         else:
             raise NotImplementedError
