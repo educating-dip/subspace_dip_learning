@@ -167,7 +167,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
                 momentum=optim_kwargs['optim']['momentum'],
                 stats_interval=optim_kwargs['optim']['stats_interval'], 
-                scale_curvature=optim_kwargs['optim']['scale_curvature']
+                curvature_reduction_scale=optim_kwargs['optim']['scale_curvature']
                 )
         else: 
             raise NotImplementedError
@@ -207,7 +207,6 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         with tqdm(range(
                 optim_kwargs['iterations']), desc='DIP', disable=not show_pbar
             ) as pbar:
-
             for i in pbar:
                 slicing_sequence = None
                 if optim_kwargs['optim']['use_subsampling_orthospace']:

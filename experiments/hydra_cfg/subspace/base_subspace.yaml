@@ -1,4 +1,4 @@
-subspace_dim: 400
+subspace_dim: 900
 use_subsampling_orthospace: False
 subsampling_orthospace:
   subsampling_orthospace_dim: 40

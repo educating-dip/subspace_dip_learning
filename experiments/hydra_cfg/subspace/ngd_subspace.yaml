@@ -19,6 +19,7 @@ fisher_info:
   curvature_ema: 0.85
   init_damping: 100
   mode: vjp_rank_one
+  sampling_probes_mode: row_norm
   return_stats: True
   use_init_fisher_info_matrix: False
   init_fisher_info_matrix:

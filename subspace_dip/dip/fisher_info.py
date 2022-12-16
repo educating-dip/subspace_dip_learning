@@ -6,9 +6,8 @@ import numpy as np
 from functools import partial
 
 from torch import Tensor
-from functorch import vmap, jacrev, vjp, jvp
+from functorch import vmap, jacrev, vjp, jvp, jacfwd
 from torch.utils.data import DataLoader
-from .utils import get_scaled_random_unit_probes
 
 class Damping:
 
@@ -24,9 +23,9 @@ class Damping:
         self._damping = value 
 
     def add_damping(self,  
-            matrix: Tensor,
-            include_Tikhonov_regularization: bool = True,
-            weight_decay: float = 0.
+        matrix: Tensor,
+        include_Tikhonov_regularization: bool = True,
+        weight_decay: float = 0.
         ) -> Tensor:
 
         matrix[np.diag_indices(matrix.shape[0])] += self.damping
@@ -35,11 +34,63 @@ class Damping:
 
         return matrix
 
+class SamplingProbes:
+    def __init__(self, prxy_mat=None, mode='row_norm', device=None):
+
+        self.prxy_mat = prxy_mat
+        self.mode = mode
+        self.device = device
+        
+        if self.mode == 'row_norm':
+            assert self.prxy_mat is not None
+            assert  self.prxy_mat.ndim == 2
+
+            un_ps = torch.linalg.norm(self.prxy_mat, dim=1, ord=2).pow(2)
+            const = un_ps.sum()
+            self.ps = un_ps/const
+
+        elif self.mode == 'gauss': 
+            pass
+        else: 
+            raise NotImplementedError
+
+    def sample_probes(self, num_random_vecs: int, shape: Tuple[int, int]) -> Tensor:
+
+        if self.mode == 'row_norm': 
+            func = self._scaled_unit_probes
+
+        elif self.mode == 'gauss':
+            def _gauss_probes(num_random_vecs, shape):
+                return torch.randn(
+                    (num_random_vecs, 1, 1, *shape), 
+                        device=self.device)
+            func = _gauss_probes
+        else:
+            raise NotImplementedError
+
+        return func(num_random_vecs=num_random_vecs, shape=shape)
+
+    def _scaled_unit_probes(self, num_random_vecs, shape):
+
+        new_shape = (num_random_vecs, 1, 1, np.prod(shape))
+        v = torch.zeros(*new_shape, device=self.device)
+        rand_inds = np.random.choice(
+                np.prod(shape), 
+                size=num_random_vecs, 
+                replace=True, 
+                p=self.ps.cpu().numpy()
+            )
+        ps_mask = self.ps.expand(num_random_vecs, -1).view(new_shape).pow(-.5)
+        v[range(num_random_vecs), :, :, rand_inds] = ps_mask[range(num_random_vecs), :, :, rand_inds]
+
+        return v.reshape(num_random_vecs, 1, 1, *shape)
+
 class FisherInfo:
 
     def __init__(self, 
-            subspace_dip,
-            init_damping: float = 1e-3,
+        subspace_dip,
+        init_damping: float = 1e-3,
+        sampling_probes_mode: str = 'row_norm'
         ):
 
         self.subspace_dip = subspace_dip
@@ -48,16 +99,14 @@ class FisherInfo:
         )
         self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
-
-        # importance sampling strategy
-        trafo = self.subspace_dip.ray_trafo.matrix
-        row_unnorm_p = torch.linalg.norm(trafo, dim=1, ord=2).pow(2)
-        norm_const = row_unnorm_p.sum()
-        self._vjp_smpl_probs = row_unnorm_p/norm_const
+        self.probes = SamplingProbes(
+                prxy_mat=self.subspace_dip.ray_trafo.matrix, 
+                mode=sampling_probes_mode, 
+                device=self.subspace_dip.device
+            )
 
     @property
-    def shape(self,
-            ) -> Tuple[int,int]:
+    def shape(self, ) -> Tuple[int,int]:
         size = self.matrix.shape[0]
         return (size, size)
 
@@ -65,22 +114,21 @@ class FisherInfo:
         self.matrix = self.init_matrix.clone() if self.init_matrix is not None else torch.eye(
             self.subspace_dip.subspace.num_subspace_params, device=self.subspace_dip.device)
 
-    def ema_cvp(self, 
-            v: Tensor,
-            use_inverse: bool = False,
-            use_square_root: bool = False, 
-            include_damping: bool = False, # include λ
-            include_Tikhonov_regularization: bool = False, # include η
-            weight_decay: float = 0.
+    def approx_fisher_vp(self,
+        v: Tensor,
+        use_inverse: bool = False,
+        use_square_root: bool = False,
+        include_damping: bool = False, # include λ
+        include_Tikhonov_regularization: bool = False, # include η
+        weight_decay: float = 0.
         ) -> Tensor:
 
         matrix = self.matrix.clone() if (
             include_damping or include_Tikhonov_regularization
                 ) else self.matrix
-    
-        if use_square_root: 
+        if use_square_root:
             chol = torch.linalg.cholesky(matrix)
-            return chol @ v
+            return chol.T@v # upper triangular matrix 
         else:
             if include_damping:
                 matrix = self.curvature_damping.add_damping(matrix=matrix, 
@@ -89,15 +137,13 @@ class FisherInfo:
                 ) # add λ and η
             return matrix @ v if not use_inverse else torch.linalg.solve(matrix, v)
 
-    def exact_cvp(self,             
-            v: Tensor,
-            use_forward_op: bool = True,
-            use_square_root: bool = False
-            ) -> Tensor:
+    def exact_fisher_vp(self,             
+        v: Tensor,
+        use_forward_op: bool = True,
+        use_square_root: bool = False
+        ) -> Tensor:
 
-            _fnet_single = partial(self._fnet_single,
-                use_forward_op=use_forward_op
-                )
+            _fnet_single = partial(self._fnet_single, use_forward_op=use_forward_op)
             _, jvp_ = jvp(_fnet_single, 
                     (self.subspace_dip.subspace.parameters_vec,), (v,)
                 ) # jvp_ = v @ J_cT = v @ (UT JT AT)
@@ -111,9 +157,9 @@ class FisherInfo:
             return Fv
 
     def _fnet_single(self,
-            parameters_vec: Tensor,
-            input: Optional[Tensor] = None,
-            use_forward_op: bool = True
+        parameters_vec: Tensor,
+        input: Optional[Tensor] = None,
+        use_forward_op: bool = True
         ) -> Tensor:
 
         out = self.subspace_dip.forward(
@@ -123,18 +169,16 @@ class FisherInfo:
             )
         return out
 
-    def deterministic_empirical_fisher(self, 
-            dataset: Optional[DataLoader] = None,
-            use_forward_op: bool = True
+    def exact_fisher_assembly(self, 
+        dataset: Optional[DataLoader] = None,
+        use_forward_op: bool = True
         ) -> Tensor:
 
-        def _per_input_deterministic_update(fbp: Optional[Tensor] = None): 
+        def _per_input_exact_update(fbp: Optional[Tensor] = None): 
                 
             _fnet_single = partial(self._fnet_single,use_forward_op=use_forward_op)
             if fbp is None:
-                jac = jacrev(
-                        _fnet_single
-                    )(self.subspace_dip.subspace.parameters_vec)
+                jac = jacrev(_fnet_single)(self.subspace_dip.subspace.parameters_vec)
             else:
                 jac = vmap(jacrev(_fnet_single), in_dims=(None, 0))(
                     self.subspace_dip.subspace.parameters_vec, fbp.unsqueeze(dim=1)
@@ -149,31 +193,31 @@ class FisherInfo:
             per_inputs_jac_list = []
             if dataset is not None:
                 for _, _, fbp in dataset:
-                    jac = _per_input_deterministic_update(fbp=fbp)
+                    jac = _per_input_exact_update(fbp=fbp)
                     per_inputs_jac_list.append(jac)
             else:
-                jac = _per_input_deterministic_update(fbp=None)
+                jac = _per_input_exact_update(fbp=None)
                 per_inputs_jac_list.append(jac)
 
             per_inputs_jac = torch.cat(per_inputs_jac_list)
             # same as (per_inputs_jac.mT @ per_inputs_jac).mean(dim=0)
             matrix = torch.mean(torch.einsum('Nop,Noc->Npc', per_inputs_jac, per_inputs_jac), dim=0)
 
-            return matrix
+            return matrix, jac
 
     def initialise_fisher_info(self,
-            dataset: Optional[DataLoader] = None,
-            num_random_vecs: int = 100, 
-            use_forward_op: bool = True,
-            mode: str = 'full'
+        dataset: Optional[DataLoader] = None,
+        num_random_vecs: int = 100, 
+        use_forward_op: bool = True,
+        mode: str = 'full'
         ) -> Tensor:
         
         if mode == 'full':
-            matrix = self.deterministic_empirical_fisher(dataset=dataset,
+            matrix, _ = self.exact_fisher_assembly(dataset=dataset,
                 use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
-            matrix = self.random_empirical_fisher(dataset=dataset,
+            matrix = self.online_fisher_assembly(dataset=dataset,
                 num_random_vecs=num_random_vecs, use_forward_op=use_forward_op
             )
         else: 
@@ -181,7 +225,7 @@ class FisherInfo:
         self.matrix = matrix
         self.init_matrix = matrix
 
-    def random_empirical_fisher(self,
+    def online_fisher_assembly(self,
         dataset: Optional[DataLoader] = None,
         num_random_vecs: int = 10,
         use_forward_op: bool = True
@@ -194,8 +238,7 @@ class FisherInfo:
 
         def _per_input_rank_one_update(fbp: Optional[Tensor] = None):
 
-            v = get_scaled_random_unit_probes(num_random_vecs,
-                    shape, device=self.subspace_dip.device, p=self._vjp_smpl_probs)
+            v = self.probes.sample_probes(num_random_vecs=num_random_vecs, shape=shape)
             _fnet_single = partial(self._fnet_single,
                 input=fbp,
                 use_forward_op=use_forward_op
@@ -209,7 +252,6 @@ class FisherInfo:
 
             vJp = vmap(_single_vjp, in_dims=0)(v) #vJp = v.T@(AJU)
             matrix = torch.einsum('Np,Nc->pc', vJp, vJp) / num_random_vecs
-
             return matrix
 
         with torch.no_grad():
@@ -228,19 +270,19 @@ class FisherInfo:
         return matrix
 
     def update(self,
-            dataset: Optional[DataLoader] = None,
-            curvature_ema: float = 0.95,
-            num_random_vecs: Optional[int] = 10,
-            use_forward_op: bool = True,
-            mode: str = 'full'
+        dataset: Optional[DataLoader] = None,
+        curvature_ema: float = 0.95,
+        num_random_vecs: Optional[int] = 10,
+        use_forward_op: bool = True,
+        mode: str = 'full'
         ) -> None:
 
         if mode == 'full':
-            update = self.deterministic_empirical_fisher(
+            update, _ = self.exact_fisher_assembly(
                 dataset=dataset, use_forward_op=use_forward_op
             )
         elif mode == 'vjp_rank_one':
-            update = self.random_empirical_fisher(dataset=dataset,
+            update = self.online_fisher_assembly(dataset=dataset,
                 use_forward_op=use_forward_op, num_random_vecs=num_random_vecs
             )
         else:

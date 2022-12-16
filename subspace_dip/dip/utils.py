@@ -32,17 +32,6 @@ def gramschmidt(
             )
     return ortho_bases
 
-def get_scaled_random_unit_probes(num_random_vecs, shape, device, p):
-
-    new_shape = (num_random_vecs, 1, 1, np.prod(shape))
-    v = torch.zeros(*new_shape, device=device)
-    rand_inds = choice(np.prod(shape), size=num_random_vecs, replace=True, p=p.cpu().numpy())
-    prob_mask = p.expand(num_random_vecs, -1).view(new_shape)
-    v[range(num_random_vecs), :, :, rand_inds] = prob_mask[range(num_random_vecs), :, :, rand_inds].pow(-.5)
-    v = v.reshape(num_random_vecs, 1, 1, *shape)
-
-    return v
-
 def stats_to_writer(stats, writer, step):
     for key, value in stats.items():
         writer.add_scalar(key, value, step)

@@ -68,8 +68,8 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             init_damping=cfg.subspace.fisher_info.init_damping,
+            sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode
         )
-
         if cfg.subspace.fisher_info.use_init_fisher_info_matrix:
 
             valset = DataLoader(
@@ -143,7 +143,8 @@ def coordinator(cfg : DictConfig) -> None:
                 }
         }
 
-        if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': optim_kwargs['optim'].update(
+        if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': 
+            optim_kwargs['optim'].update(
             {
                 'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                 'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
@@ -156,9 +157,9 @@ def coordinator(cfg : DictConfig) -> None:
                 'mode': cfg.subspace.fisher_info.mode, 
                 'return_stats': cfg.subspace.fisher_info.return_stats
             })
+            fisher_info.reset_fisher_matrix()
 
         subspace.init_parameters()
-        fisher_info.reset_fisher_matrix()
         recon = reconstructor.reconstruct(
             noisy_observation=observation,
             filtbackproj=filtbackproj,
