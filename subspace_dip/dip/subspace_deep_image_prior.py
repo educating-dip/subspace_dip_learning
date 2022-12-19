@@ -169,6 +169,14 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 stats_interval=optim_kwargs['optim']['stats_interval'], 
                 curvature_reduction_scale=optim_kwargs['optim']['scale_curvature']
                 )
+            curvature_update_kwargs = {
+                'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
+                'use_forward_op': True,
+                'mode': optim_kwargs['optim']['mode'], 
+                'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema']
+            }
+            if optim_kwargs['optim']['update_curvature_ema']:            
+                curvature_update_kwargs.update({'curvature_ema_kwargs': optim_kwargs['optim']['curvature_ema_kwargs']})
         else: 
             raise NotImplementedError
 
@@ -241,13 +249,6 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         slicing_sequence=slicing_sequence,
                         gamma=optim_kwargs['optim']['gamma']
                     )
-
-                    curvature_update_kwargs = {
-                        'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
-                        'curvature_ema': optim_kwargs['optim']['curvature_ema'], 
-                        'use_forward_op': True,
-                        'mode': optim_kwargs['optim']['mode']
-                    }
 
                     loss, output, optim_step_stats = self.optimizer.step(
                         curvature=fisher_info,

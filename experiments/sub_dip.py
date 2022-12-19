@@ -68,6 +68,7 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             init_damping=cfg.subspace.fisher_info.init_damping,
+            curvature_ema=cfg.subspace.fisher_info.curvature_ema,
             sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode
         )
         if cfg.subspace.fisher_info.use_init_fisher_info_matrix:
@@ -147,14 +148,15 @@ def coordinator(cfg : DictConfig) -> None:
             optim_kwargs['optim'].update(
             {
                 'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
-                'curvature_ema': cfg.subspace.fisher_info.curvature_ema,
                 'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
                 'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
                 'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
                 'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
                 'scale_curvature': cfg.subspace.fine_tuning.optim.scale_curvature,
                 'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
-                'mode': cfg.subspace.fisher_info.mode, 
+                'mode': cfg.subspace.fisher_info.mode,
+                'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
+                'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs), 
                 'return_stats': cfg.subspace.fisher_info.return_stats
             })
             fisher_info.reset_fisher_matrix()

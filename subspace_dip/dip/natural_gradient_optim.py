@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 import torch
 import numpy as np
 from torch import Tensor
@@ -46,9 +46,8 @@ class NGD(Optimizer):
                     stats_interval=stats_interval, curvature_reduction_scale=curvature_reduction_scale, 
                     differentiable=differentiable
                 )
-        self.step_counter = 0
+        self.step_cnt = 0
         self.old_step = None 
-        self.FREEZE_DAMPING_UPDATE = False # switch activated when empirical Fisher low-rank regime is exited
 
         super(NGD, self).__init__(params, defaults)
 
@@ -79,7 +78,7 @@ class NGD(Optimizer):
         group = self.param_groups[0]
         params_with_grad = group['params'][0]
 
-        step, loss, output, curvature_reduction_scale, FREEZE_DAMPING_UPDATE, stats = ngd(
+        step, loss, output, curvature_reduction_scale, stats = ngd(
             params_with_grad=params_with_grad,
             curvature=curvature,
             curvature_kwargs=curvature_kwargs,
@@ -91,18 +90,16 @@ class NGD(Optimizer):
             use_adaptive_learning_rate=use_adaptive_learning_rate,
             use_adaptive_momentum=use_adaptive_momentum,
             use_adaptive_damping=use_adaptive_damping,
-            use_approximate_quad_model=use_approximate_quad_model, 
+            use_approximate_quad_model=use_approximate_quad_model,
             old_step=self.old_step,
-            step_counter=self.step_counter,
+            step_cnt=self.step_cnt,
             closure=closure,
-            FREEZE_DAMPING_UPDATE=self.FREEZE_DAMPING_UPDATE,
             return_stats=return_stats
             )
         
-        self.step_counter += 1
+        self.step_cnt += 1
         self.old_step = step
         self.param_groups[0]['curvature_reduction_scale'] = curvature_reduction_scale
-        self.FREEZE_DAMPING_UPDATE=FREEZE_DAMPING_UPDATE
 
         return loss, output, stats
 
@@ -110,6 +107,7 @@ def ngd(params_with_grad: Tensor,
         curvature: FisherInfo,
         curvature_kwargs: Dict,
         old_step: Tensor,
+        closure=None,
         lr: float = 0.1,
         momentum: float = 0.,
         weight_decay: float = 0.,
@@ -125,9 +123,7 @@ def ngd(params_with_grad: Tensor,
         adaptation_decay: float = 0.75,
         lower_threshold: float = 0.25,
         upper_threshold: float = 0.75,
-        closure=None,
-        step_counter: int = 0, 
-        FREEZE_DAMPING_UPDATE: bool = False,
+        step_cnt: int = 0, 
         return_stats: bool = False
         ):
 
@@ -137,6 +133,8 @@ def ngd(params_with_grad: Tensor,
         params_with_grad=params_with_grad,
         curvature=curvature,
         curvature_kwargs=curvature_kwargs,
+        old_step=old_step,
+        closure=closure,
         lr=lr,
         momentum=momentum,
         weight_decay=weight_decay,
@@ -152,10 +150,7 @@ def ngd(params_with_grad: Tensor,
         adaptation_decay=adaptation_decay,
         lower_threshold=lower_threshold,
         upper_threshold=upper_threshold,
-        old_step=old_step,
-        closure=closure,
-        step_counter=step_counter,
-        FREEZE_DAMPING_UPDATE=FREEZE_DAMPING_UPDATE,
+        step_cnt=step_cnt,
         return_stats=return_stats
     )
 
@@ -166,6 +161,7 @@ def _single_tensor_ngd(
         curvature: FisherInfo,
         curvature_kwargs: Dict,
         old_step: Tensor,
+        closure = None,
         momentum: float = 0.,
         lr: float = 0.1,
         weight_decay: float = 0.,
@@ -185,14 +181,22 @@ def _single_tensor_ngd(
         adaptation_decay: float = 0.75,
         lower_threshold: float = 0.25,
         upper_threshold: float = 0.75,
-        closure = None,
-        step_counter: int = 0,
-        FREEZE_DAMPING_UPDATE: bool = False,
+        step_cnt: int = 0,
         return_stats: bool = False
         ):
 
     # update curvature estimate
-    curvature.update(**curvature_kwargs)
+    curvature_matrix_update_kwargs =  {
+        'num_random_vecs': curvature_kwargs['num_random_vecs'],
+        'use_forward_op': curvature_kwargs['use_forward_op'],
+        'mode': curvature_kwargs['mode']
+    }
+    curvature.update(**curvature_matrix_update_kwargs)
+    if curvature_kwargs['update_curvature_ema']:
+        curvature.update_curvature_ema(
+            step_cnt=step_cnt, 
+            update_kwargs=curvature_kwargs['curvature_ema_kwargs']
+            )
 
     # compute loss and proposed directions (i.e. gradients: ∇h(θ = γ(c))) 
     with torch.enable_grad():
@@ -234,8 +238,8 @@ def _single_tensor_ngd(
     step = -lr*natural_descent_directions + momentum * old_step
     params_with_grad.add_(step, alpha=1) # update parameters c + 𝛿
 
-    # Optionally compute the reduction ratio and update the damping if not FREEZE_DAMPING_UPDATE
-    if use_adaptive_damping and ((step_counter + 1) % adaptation_interval == 0 and not FREEZE_DAMPING_UPDATE):
+    # Optionally compute the reduction ratio and update the damping
+    if use_adaptive_damping and ((step_cnt + 1) % adaptation_interval == 0):
 
         damping_adaptive_kwargs = {
             'weight_decay': weight_decay,
@@ -248,42 +252,39 @@ def _single_tensor_ngd(
             'use_approximate_quad_model': use_approximate_quad_model
             }
         current_damping = curvature.curvature_damping.damping
-        updated_damping, rho, change = _update_hyperparam_based_on_reduction_ratio(
+        updated_damping, rho, pred_change, change_in_objective = _update_hyperparam_based_on_reduction_ratio(
             curvature=curvature,
             closure=closure,
             old_loss=loss,
             params_with_grad=params_with_grad,
             step=step,
-            current_hyperparam=current_damping, 
+            current_hyperparam=current_damping,
             curvature_reduction_scale=curvature_reduction_scale,
             **damping_adaptive_kwargs
         )
         curvature.curvature_damping.damping = updated_damping
-        if updated_damping <= min_hyperparam:
-            # empirical Fisher low-rank regime exited
-            FREEZE_DAMPING_UPDATE = False #TODO: remove this flag is not needed 
     
-    if (step_counter + 1) % adaptation_interval == 0 and use_adaptive_learning_rate:
+    if (step_cnt + 1) % adaptation_interval == 0 and use_adaptive_learning_rate:
         
         curvature_reduction_adaptive_kwargs = {
             'weight_decay': weight_decay,
             'adaptation_interval': adaptation_interval,
             'adaptation_decay': adaptation_decay,
-            'lower_threshold': 0.75,
+            'lower_threshold': 0.75, # a more sentive threshold used here (w.r.t. damping)
             'upper_threshold': 1.25,
-            'use_reciprocal': False,
             'min_hyperparam': 1e-3,
             'max_hyperparam': 1.,
             'use_approximate_quad_model': use_approximate_quad_model
             }
 
-        #TODO: optimise no need for double operation
-        updated_curvature_reduction_scale, rho, change = _update_hyperparam_based_on_reduction_ratio(
+        updated_curvature_reduction_scale, rho, _, _ = _update_hyperparam_based_on_reduction_ratio(
             curvature=curvature,
             closure=closure,
             old_loss=loss,
             params_with_grad=params_with_grad,
             step=step,
+            pred_change=pred_change, 
+            change_in_objective=change_in_objective,
             current_hyperparam=curvature_reduction_scale,
             curvature_reduction_scale=curvature_reduction_scale,
             **curvature_reduction_adaptive_kwargs
@@ -291,21 +292,22 @@ def _single_tensor_ngd(
         curvature_reduction_scale = updated_curvature_reduction_scale
 
     stats = None
-    if return_stats and (step_counter + 1) % stats_interval == 0:
+    if return_stats and (step_cnt + 1) % stats_interval == 0:
         stats = {
-            'rho': rho if 'rho' in locals() else 0.,
+            'rho': rho.item() if 'rho' in locals() else 0.,
             'model_change': change if 'change' in locals() else 0.,
             'curvature_damping': curvature.curvature_damping.damping,
-            'lr': lr, 
+            'lr': lr,
             'momentum': momentum if hasattr(momentum, 'item') else momentum,
-            'curvature_reduction_scale': curvature_reduction_scale, 
+            'curvature_reduction_scale': curvature_reduction_scale,
+            'curvature_ema': curvature.curvature_ema,
             'step': step.pow(2).sum().item(), 
             'descent_directions': descent_directions.pow(2).sum().item(),
             'natural_descent_directions_norm': natural_descent_directions.pow(2).sum().item()
         }
 
-    outs = (step, loss.detach(), output.detach(), curvature_reduction_scale, FREEZE_DAMPING_UPDATE, None) if not return_stats \
-                else (step, loss.detach(), output.detach(), curvature_reduction_scale, FREEZE_DAMPING_UPDATE, stats)
+    outs = (step, loss.detach(), output.detach(), curvature_reduction_scale, None) if not return_stats \
+                else (step, loss.detach(), output.detach(), curvature_reduction_scale, stats)
     
     return outs
 
@@ -401,8 +403,10 @@ def _update_hyperparam_based_on_reduction_ratio(
         old_loss: Tensor,
         params_with_grad: Tensor,
         step: Tensor,
-        current_hyperparam: float, 
-        weight_decay: float,
+        current_hyperparam: float,
+        pred_change: Optional[Tensor] = None, 
+        change_in_objective: Optional[Tensor] = None,
+        weight_decay: float = 0.,
         min_hyperparam: float = 1e-0,
         max_hyperparam: float = 100.,
         adaptation_interval: int = 5, 
@@ -413,31 +417,31 @@ def _update_hyperparam_based_on_reduction_ratio(
         ratio_upper_threshold: float = 1.01, 
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 0.001, 
-        use_reciprocal: bool = False
     ) -> Tuple[float,float]:
     
-    reciprocal = - 1 if use_reciprocal else 1
 
     # reduction ratio
-    # at this point params_with_grad have been updated but not the grads
-    change, scaled_𝛿TF𝛿, tangent_plane = _compute_quadratic_model_value(
-        curvature=curvature,
-        step=step, descent_directions=params_with_grad.grad, # ∇h
-        weight_decay=weight_decay, use_approximate_quad_model=use_approximate_quad_model,
-        curvature_reduction_scale=curvature_reduction_scale)
+    if pred_change is None and change_in_objective is None: 
+        pred_change, scaled_𝛿TF𝛿, tangent_plane = _compute_quadratic_model_value(
+            curvature=curvature,
+            # ∇h at this point params_with_grad have been updated but not the grads
+            step=step, descent_directions=params_with_grad.grad,
+            weight_decay=weight_decay, use_approximate_quad_model=use_approximate_quad_model,
+            curvature_reduction_scale=curvature_reduction_scale)
 
-    # at this point params_with_grad have been updated
-    new_loss = closure(parameters_vec=params_with_grad)[0]
-    change_in_objecvitve = new_loss - old_loss
-    rho = (change_in_objecvitve / change).cpu().numpy()
-    rho_not_nan = np.nan_to_num(rho, nan=-100.0)
+        # at this point params_with_grad have been updated
+        new_loss = closure(parameters_vec=params_with_grad)[0]
+        change_in_objective = new_loss - old_loss
+
+    rho = change_in_objective / pred_change
+    rho_not_nan = torch.nan_to_num(rho, nan=-100.0)
 
     if rho_not_nan < lower_threshold:
-        updated_hyperparam = adaptation_decay**(-adaptation_interval*reciprocal)*current_hyperparam
+        updated_hyperparam = adaptation_decay**(-adaptation_interval)*current_hyperparam
     elif rho_not_nan > upper_threshold:
-        updated_hyperparam = adaptation_decay**(adaptation_interval*reciprocal)*current_hyperparam
+        updated_hyperparam = adaptation_decay**(adaptation_interval)*current_hyperparam
     else:
         updated_hyperparam = current_hyperparam
     updated_hyperparam = np.clip(updated_hyperparam, a_min=min_hyperparam, a_max=max_hyperparam)
 
-    return updated_hyperparam, rho_not_nan, change
+    return updated_hyperparam, rho_not_nan, pred_change, change_in_objective

@@ -85,11 +85,22 @@ class SamplingProbes:
 
         return v.reshape(num_random_vecs, 1, 1, *shape)
 
+def _ema_polynomial_scheduler(
+    step_cnt: int,
+    base_curvature_ema: float = 0.5,
+    max_iterations: int = 1000, 
+    power: float = .99, 
+    max_ema: float = 0.95, 
+    increase: bool = True
+    ) -> float:
+    return np.clip(base_curvature_ema * ((1 - float(step_cnt) / max_iterations) ** (- power*increase + power*(not increase) )), a_min=1-max_ema, a_max=max_ema)
+
 class FisherInfo:
 
     def __init__(self, 
         subspace_dip,
         init_damping: float = 1e-3,
+        curvature_ema: float = 0.95,
         sampling_probes_mode: str = 'row_norm'
         ):
 
@@ -99,16 +110,28 @@ class FisherInfo:
         )
         self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
+        self._curvature_ema = curvature_ema
         self.probes = SamplingProbes(
                 prxy_mat=self.subspace_dip.ray_trafo.matrix, 
                 mode=sampling_probes_mode, 
                 device=self.subspace_dip.device
             )
-
+    
     @property
     def shape(self, ) -> Tuple[int,int]:
         size = self.matrix.shape[0]
         return (size, size)
+    
+    @property
+    def curvature_ema(self, ) -> float:
+        return self._curvature_ema 
+
+    @curvature_ema.setter
+    def curvature_ema(self, value) -> None:
+        self._curvature_ema = value
+    
+    def update_curvature_ema(self, step_cnt: int, update_kwargs) -> None:
+        self.curvature_ema = _ema_polynomial_scheduler(step_cnt=step_cnt, **update_kwargs)
 
     def reset_fisher_matrix(self, ) -> None:
         self.matrix = self.init_matrix.clone() if self.init_matrix is not None else torch.eye(
@@ -127,8 +150,9 @@ class FisherInfo:
             include_damping or include_Tikhonov_regularization
                 ) else self.matrix
         if use_square_root:
-            chol = torch.linalg.cholesky(matrix)
-            return chol.T@v # upper triangular matrix 
+            # it returns the upper triangular matrix 
+            chol = torch.linalg.cholesky(matrix, upper=True) 
+            return chol@v 
         else:
             if include_damping:
                 matrix = self.curvature_damping.add_damping(matrix=matrix, 
