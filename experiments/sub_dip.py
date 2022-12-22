@@ -1,9 +1,9 @@
-from itertools import islice
 import hydra
-from omegaconf import DictConfig, OmegaConf
 import torch
-from torch.utils.data import DataLoader
 
+from itertools import islice
+from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader
 from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
@@ -62,53 +62,15 @@ def coordinator(cfg : DictConfig) -> None:
         net_kwargs=net_kwargs
     )
 
-    fisher_info = None 
+    fisher_info = None
     if cfg.subspace.fine_tuning.optim.optimizer == 'ngd':
-
+        
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             init_damping=cfg.subspace.fisher_info.init_damping,
-            curvature_ema=cfg.subspace.fisher_info.curvature_ema,
+            curvature_ema=cfg.subspace.fisher_info.static_curvature_ema,
             sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode
         )
-        if cfg.subspace.fisher_info.use_init_fisher_info_matrix:
-
-            valset = DataLoader(
-                get_ellipses_dataset(
-                    ray_trafo=ray_trafo, 
-                    fold='test', 
-                    im_size=cfg.source_dataset.im_size,
-                    length=cfg.source_dataset.length.test, 
-                    white_noise_rel_stddev=cfg.source_dataset.noise_stddev, 
-                    use_fixed_seeds_starting_from=cfg.seed, 
-                    device=device
-                ),
-                batch_size=cfg.subspace.fisher_info.batch_size,
-                shuffle=True
-            )
-
-            subspace.set_parameters_on_valset(       
-                subspace_dip=reconstructor,
-                ray_trafo=ray_trafo,
-                valset=valset,
-                optim_kwargs={
-                    'epochs': cfg.subspace.fisher_info.init_fisher_info_matrix.epochs, 
-                    'batch_size': cfg.subspace.fisher_info.init_fisher_info_matrix.batch_size,
-                    'optim':{
-                        'lr': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.lr,
-                        'weight_decay': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.weight_decay, 
-                        'gamma': cfg.subspace.fisher_info.init_fisher_info_matrix.optim.gamma
-                        },
-                    'log_path': './',
-                    'torch_manual_seed': cfg.dip.torch_manual_seed
-                    }
-                )
-            
-            fisher_info.initialise_fisher_info(
-                dataset=valset, 
-                num_random_vecs=cfg.subspace.fisher_info.init_fisher_info_matrix.num_random_vecs,
-                mode=cfg.subspace.fisher_info.mode,
-            )
 
     dataset = get_standard_test_dataset(
         ray_trafo,
@@ -130,7 +92,7 @@ def coordinator(cfg : DictConfig) -> None:
         filtbackproj = filtbackproj.to(dtype=dtype, device=device)
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
-        optim_kwargs = {
+        optim_kwargs = { # optim_kwargs for adam and lbfgs
             'iterations': cfg.subspace.fine_tuning.iterations,
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
@@ -138,7 +100,6 @@ def coordinator(cfg : DictConfig) -> None:
                     'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
                     'gamma': cfg.subspace.fine_tuning.optim.gamma,
                     'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
-                    'momentum': cfg.subspace.fine_tuning.optim.momentum,
                     'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
                     'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim
                 }
@@ -146,19 +107,20 @@ def coordinator(cfg : DictConfig) -> None:
 
         if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': 
             optim_kwargs['optim'].update(
-            {
-                'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
-                'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
-                'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
-                'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
-                'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
-                'scale_curvature': cfg.subspace.fine_tuning.optim.scale_curvature,
-                'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
-                'mode': cfg.subspace.fisher_info.mode,
-                'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
-                'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs), 
-                'return_stats': cfg.subspace.fisher_info.return_stats
-            })
+                { # optim_kwargs specific to ngd
+                    'momentum': cfg.subspace.fine_tuning.optim.momentum,
+                    'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
+                    'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
+                    'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
+                    'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
+                    'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
+                    'scale_curvature': cfg.subspace.fine_tuning.optim.scale_curvature,
+                    'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
+                    'mode': cfg.subspace.fisher_info.mode,
+                    'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
+                    'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs), 
+                    'return_stats': cfg.subspace.fisher_info.return_stats
+                })
             fisher_info.reset_fisher_matrix()
 
         subspace.init_parameters()

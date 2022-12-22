@@ -118,7 +118,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 slicing_sequence=slicing_sequence,
                 use_forward_op=use_forward_op
             )
-        
+
         loss = criterion(self.ray_trafo(output), noisy_observation)
         if use_tv_loss:
             loss = loss + gamma*tv_loss(output)
@@ -160,7 +160,15 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 lr=optim_kwargs['optim']['lr'],
                 weight_decay=optim_kwargs['optim']['weight_decay']
                 )
+
+        elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
+            self.optimizer = torch.optim.LBFGS(
+                [self.subspace.parameters_vec],
+                line_search_fn="strong_wolfe"
+                )
+
         elif optim_kwargs['optim']['optimizer'] == 'ngd':
+
             self.optimizer = NGD(
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
@@ -176,8 +184,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema']
             }
             if optim_kwargs['optim']['update_curvature_ema']:            
-                curvature_update_kwargs.update({'curvature_ema_kwargs': optim_kwargs['optim']['curvature_ema_kwargs']})
-        else: 
+                curvature_update_kwargs.update(
+                            {'curvature_ema_kwargs': optim_kwargs['optim']['curvature_ema_kwargs']})
+        else:
             raise NotImplementedError
 
         noisy_observation = noisy_observation.to(self.device)
@@ -216,6 +225,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 optim_kwargs['iterations']), desc='DIP', disable=not show_pbar
             ) as pbar:
             for i in pbar:
+                
                 slicing_sequence = None
                 if optim_kwargs['optim']['use_subsampling_orthospace']:
                     slicing_sequence = np.random.choice(range(
@@ -224,23 +234,44 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         replace=False, 
                         p=self.singular_probabilities.cpu().numpy()
                     )
-                self.optimizer.zero_grad()
-
+                
                 if optim_kwargs['optim']['optimizer'] == 'adam':
 
+                    self.optimizer.zero_grad()
                     loss, output = self.objective(
-                    criterion=criterion,
-                    noisy_observation=noisy_observation,
-                    use_tv_loss=use_tv_loss,
-                    weight_decay=optim_kwargs['optim']['weight_decay'],
-                    slicing_sequence=slicing_sequence,
-                    gamma=optim_kwargs['optim']['gamma']
-                    )
+                        criterion=criterion,
+                        noisy_observation=noisy_observation,
+                        use_tv_loss=use_tv_loss,
+                        weight_decay=optim_kwargs['optim']['weight_decay'],
+                        slicing_sequence=slicing_sequence,
+                        gamma=optim_kwargs['optim']['gamma']
+                        )
                     loss.backward()
                     self.optimizer.step()
 
-                elif optim_kwargs['optim']['optimizer'] == 'ngd':
+                elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
 
+                    def closure():
+
+                        self.optimizer.zero_grad()
+                        loss, output = self.objective(
+                        criterion=criterion,
+                        noisy_observation=noisy_observation,
+                        use_tv_loss=use_tv_loss,
+                        weight_decay=optim_kwargs['optim']['weight_decay'],
+                        slicing_sequence=slicing_sequence,
+                        gamma=optim_kwargs['optim']['gamma']
+                        )
+                        loss.backward(retain_graph=True)
+
+                        return loss
+
+                    loss = self.optimizer.step(closure)
+                    output = self.forward(use_forward_op=False)
+
+                elif optim_kwargs['optim']['optimizer'] == 'ngd':
+                    
+                    self.optimizer.zero_grad()
                     partial_closure = partial(self.objective, 
                         criterion=criterion,
                         noisy_observation=noisy_observation,
