@@ -186,18 +186,25 @@ def _single_tensor_ngd(
         ):
 
     # update curvature estimate
+
     curvature_matrix_update_kwargs =  {
         'num_random_vecs': curvature_kwargs['num_random_vecs'],
         'use_forward_op': curvature_kwargs['use_forward_op'],
         'mode': curvature_kwargs['mode']
     }
-    curvature.update(**curvature_matrix_update_kwargs)
+
     if curvature_kwargs['update_curvature_ema']:
         curvature.update_curvature_ema(
-            step_cnt=step_cnt, 
+            step_cnt=step_cnt,
             update_kwargs=curvature_kwargs['curvature_ema_kwargs']
             )
+        num_random_vecs = np.clip(
+            int( curvature_kwargs['num_random_vecs'] * (1 - curvature.curvature_ema) ), 
+            a_min=1, a_max=curvature_kwargs['num_random_vecs']
+            )
+        curvature_matrix_update_kwargs.update({'num_random_vecs': 2 * num_random_vecs})
 
+    curvature.update(**curvature_matrix_update_kwargs)
     # compute loss and proposed directions (i.e. gradients: ∇h(θ = γ(c))) 
     with torch.enable_grad():
         loss, output = closure(parameters_vec=params_with_grad)
@@ -239,6 +246,7 @@ def _single_tensor_ngd(
     params_with_grad.add_(step, alpha=1) # update parameters c + 𝛿
 
     # Optionally compute the reduction ratio and update the damping
+    pred_change, change_in_objective = None, None
     if use_adaptive_damping and ((step_cnt + 1) % adaptation_interval == 0):
 
         damping_adaptive_kwargs = {
@@ -270,8 +278,8 @@ def _single_tensor_ngd(
             'weight_decay': weight_decay,
             'adaptation_interval': adaptation_interval,
             'adaptation_decay': adaptation_decay,
-            'lower_threshold': 0.75, # a more sentive threshold used here (w.r.t. damping)
-            'upper_threshold': 1.25,
+            'lower_threshold': 0.95, # a more sentive threshold used here (w.r.t. damping)
+            'upper_threshold': 1.05,
             'min_hyperparam': 1e-3,
             'max_hyperparam': 1.,
             'use_approximate_quad_model': use_approximate_quad_model

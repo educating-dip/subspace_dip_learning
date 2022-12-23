@@ -93,7 +93,11 @@ def _ema_polynomial_scheduler(
     max_ema: float = 0.95, 
     increase: bool = True
     ) -> float:
-    return np.clip(base_curvature_ema * ((1 - float(step_cnt) / max_iterations) ** (- power*increase + power*(not increase) )), a_min=1-max_ema, a_max=max_ema)
+
+    fct = np.clip(step_cnt / max_iterations, a_max=1, a_min=0)
+    return np.clip(base_curvature_ema * (
+        (1.1 - fct) ** (- power*increase + power*(not increase) )
+            ), a_min=1-max_ema, a_max=max_ema)
 
 class FisherInfo:
 

@@ -16,13 +16,13 @@ fine_tuning:
 fisher_info:
   batch_size: 1
   num_random_vecs: 100
-  static_curvature_ema: 0.85
+  static_curvature_ema: 0.95
   update_curvature_ema: True
   curvature_ema_kwargs:
-    max_iterations: 2000
+    max_iterations: 200
     base_curvature_ema: 0.5
-    power: 0.75
-    max_ema: 0.95
+    power: 0.99
+    max_ema: 0.99
     increase: True
   init_damping: 100
   mode: vjp_rank_one

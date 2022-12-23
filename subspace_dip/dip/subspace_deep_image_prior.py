@@ -92,7 +92,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         ) -> Tensor:
 
         out = self.func_model_with_input(
-                # θ = γ(c) = θ_p + \sum_i c_i * u_i
+                # θ = γ(c) = θ_p + \sum_i c_i * u_i, parameters_vec = c_i
                 self.get_func_params( 
                     parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
                     slicing_sequence=slicing_sequence
@@ -284,11 +284,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     loss, output, optim_step_stats = self.optimizer.step(
                         curvature=fisher_info,
                         curvature_kwargs=curvature_update_kwargs,
+                        closure=partial_closure, 
                         use_adaptive_learning_rate=optim_kwargs['optim']['use_adaptive_learning_rate'],
                         use_adaptive_momentum=optim_kwargs['optim']['use_adaptive_momentum'],
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
                         use_approximate_quad_model=optim_kwargs['optim']['use_approximate_quad_model'],
-                        closure=partial_closure, 
                         return_stats=optim_kwargs['optim']['return_stats']
                     )
                 else: 
