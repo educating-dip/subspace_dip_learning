@@ -1,4 +1,5 @@
 """
+From https://github.com/educating-dip/bayes_dip/blob/main/bayes_dip/data/trafo/parallel_beam_2d_ray_trafo.py.
 Provides :class:`ParallelBeam2DRayTrafo`, as well as getters
 for its matrix representation and a :class:`MatmulRayTrafo` implementation.
 """

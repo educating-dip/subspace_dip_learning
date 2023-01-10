@@ -1,4 +1,5 @@
 """
+From https://github.com/educating-dip/bayes_dip/blob/main/bayes_dip/data/trafo/base_ray_trafo.py.
 Provides :class:`BaseRayTrafo`.
 """
 

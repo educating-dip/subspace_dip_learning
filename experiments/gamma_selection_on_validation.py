@@ -1,4 +1,3 @@
-from typing import Optional, List
 import hydra
 import os
 import os.path
@@ -7,66 +6,7 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import copy
 import difflib
-
-def find_log_files(log_dir: str) -> str:
-    log_files = []
-    for path, _, files in os.walk(log_dir):
-        for file in files:
-            if file.startswith('events.out.tfevents.'):
-                log_files.append(os.path.join(path, file))
-    if not log_files:
-        raise RuntimeError(f'did not find log file in {log_dir}')
-    return log_files
-
-def extract_tensorboard_scalars(
-        log_file: str, save_as_npz: str = '', tags: Optional[List[str]] = None) -> dict:
-    """
-    From https://github.com/educating-dip/bayes_dip/blob/5ae7946756d938a7cd00ad56307a934b8dd3685e/bayes_dip/utils/evaluation_utils.py#L693
-    Extract scalars from a tensorboard log file.
-    Parameters
-    ----------
-    log_file : str
-        Tensorboard log filepath.
-    save_as_npz : str, optional
-        File path to save the extracted scalars as a npz file.
-    tags : list of str, optional
-        If specified, only extract these tags.
-    """
-    try:
-        from tensorboard.backend.event_processing import event_accumulator
-    except ModuleNotFoundError:
-        raise RuntimeError('Tensorboard\'s event_accumulator could not be imported, which is '
-                           'required by `extract_tensorboard_scalars`')
-
-    ea = event_accumulator.EventAccumulator(
-            log_file, size_guidance={event_accumulator.SCALARS: 0})
-    ea.Reload()
-
-    tags = tags or ea.Tags()['scalars']
-
-    scalars = {}
-    for tag in tags:
-        events = ea.Scalars(tag)
-        steps = [event.step for event in events]
-        values = [event.value for event in events]
-        scalars[tag + '_steps'] = np.asarray(steps)
-        scalars[tag + '_scalars'] = np.asarray(values)
-
-    if save_as_npz:
-        np.savez(save_as_npz, **scalars)
-
-    return scalars
-
-def print_dct(dct):
-    for (item, values) in dct.items():
-        print(item)
-        for value in values:
-            print(value)
-
-# from https://stackoverflow.com/a/47882384
-def sorted_dict(d):
-    return {k: sorted_dict(v) if isinstance(v, dict) else v
-            for k, v in sorted(d.items())}
+from subspace_dip.utils import find_log_files, extract_tensorboard_scalars, print_dct, sorted_dict
 
 def collect_runs_paths_per_gamma(base_paths, raise_on_cfg_diff=False):
     paths = {}

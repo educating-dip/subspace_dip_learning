@@ -9,7 +9,7 @@ optim:
   lr: 1e-4
   iterations: 10000
   loss_function: mse
-  gamma: 1e-4
+  gamma: 6.5e-6
   optimizer: adam
 show_pbar: True
 torch_manual_seed: 10

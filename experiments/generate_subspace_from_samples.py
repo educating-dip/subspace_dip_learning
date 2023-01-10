@@ -10,7 +10,7 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    ray_trafo = get_standard_ray_trafo(
+    ray_trafo = get_standard_ray_trafo( # placeholder 
         ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
         dataset_kwargs={
             'name': cfg.source_dataset.name,
@@ -29,7 +29,7 @@ def coordinator(cfg : DictConfig) -> None:
         }
 
     base_reconstructor = DeepImagePrior(
-                ray_trafo, 
+                ray_trafo, # placeholder 
                 torch_manual_seed=cfg.dip.torch_manual_seed,
                 device=device, 
                 net_kwargs=net_kwargs

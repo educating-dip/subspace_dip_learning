@@ -155,6 +155,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         )
 
         if optim_kwargs['optim']['optimizer'] == 'adam':
+
             self.optimizer = torch.optim.Adam(
                 [self.subspace.parameters_vec],
                 lr=optim_kwargs['optim']['lr'],
@@ -162,6 +163,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 )
 
         elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
+
             self.optimizer = torch.optim.LBFGS(
                 [self.subspace.parameters_vec],
                 line_search_fn="strong_wolfe"
@@ -183,7 +185,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 'mode': optim_kwargs['optim']['mode'], 
                 'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema']
             }
-            if optim_kwargs['optim']['update_curvature_ema']:            
+            if optim_kwargs['optim']['update_curvature_ema']:
+          
                 curvature_update_kwargs.update(
                             {'curvature_ema_kwargs': optim_kwargs['optim']['curvature_ema_kwargs']})
         else:

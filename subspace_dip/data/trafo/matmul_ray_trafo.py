@@ -1,4 +1,5 @@
 """
+From https://github.com/educating-dip/bayes_dip/blob/main/bayes_dip/data/trafo/matmul_ray_trafo.py.
 Provides :class:`MatmulRayTrafo`.
 """
 
