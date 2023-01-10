@@ -75,6 +75,7 @@ def coordinator(cfg : DictConfig) -> None:
     dataset = get_standard_test_dataset(
         ray_trafo,
         dataset_kwargs=OmegaConf.to_object(cfg.test_dataset),
+        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo),
         use_fixed_seeds_starting_from=cfg.seed,
         device=device,
     )

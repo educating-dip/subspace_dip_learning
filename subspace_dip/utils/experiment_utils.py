@@ -1,7 +1,7 @@
 from typing import Dict, Optional, List
 import os
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, TensorDataset
 from subspace_dip.data import get_ray_trafo, SimulatedDataset
 from subspace_dip.data import (
         RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, 
@@ -28,6 +28,7 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
 def get_standard_test_dataset(
         ray_trafo,
         dataset_kwargs,
+        trafo_kwargs, 
         use_fixed_seeds_starting_from=1, 
         device=None
     ) -> Dataset:
@@ -85,21 +86,18 @@ def get_standard_test_dataset(
                 use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
                 device=device)
 
-    elif cfg.dataset.name == 'walnut':
-
-        if fold == 'validation':
-            raise ValueError('Walnut dataset has no validation fold implemented.')
+    elif dataset_kwargs['name'] == 'walnut':
 
         noisy_observation = get_walnut_2d_observation(
-                data_path=os.path.join(get_original_cwd(), cfg.dataset.data_path),
-                walnut_id=cfg.dataset.walnut_id, orbit_id=cfg.trafo.orbit_id,
-                angular_sub_sampling=cfg.trafo.angular_sub_sampling,
-                proj_col_sub_sampling=cfg.trafo.proj_col_sub_sampling,
-                scaling_factor=cfg.dataset.scaling_factor).to(device=device)
+                data_path=os.path.join(get_original_cwd(),dataset_kwargs['data_path']),
+                walnut_id=dataset_kwargs['walnut_id'], orbit_id=trafo_kwargs['orbit_id'],
+                angular_sub_sampling=trafo_kwargs['angular_sub_sampling'],
+                proj_col_sub_sampling=trafo_kwargs['proj_col_sub_sampling'],
+                scaling_factor=dataset_kwargs['scaling_factor']).to(device=device)
         ground_truth = get_walnut_2d_ground_truth(
-                data_path=os.path.join(get_original_cwd(), cfg.dataset.data_path),
-                walnut_id=cfg.dataset.walnut_id, orbit_id=cfg.trafo.orbit_id,
-                scaling_factor=cfg.dataset.scaling_factor).to(device=device)
+                data_path=os.path.join(get_original_cwd(),dataset_kwargs['data_path']),
+                walnut_id=dataset_kwargs['walnut_id'], orbit_id=trafo_kwargs['orbit_id'],
+                scaling_factor=dataset_kwargs['scaling_factor']).to(device=device)
         filtbackproj = ray_trafo.fbp(
                 noisy_observation[None].to(device=device))[0].to(device=device)
         dataset = TensorDataset(  # include batch dims

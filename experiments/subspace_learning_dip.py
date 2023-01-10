@@ -9,9 +9,9 @@ def coordinator(cfg : DictConfig) -> None:
 
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
-
+    
+    assert cfg.source_dataset.im_size == cfg.test_dataset.im_size
     if cfg.test_dataset.name in ['walnut']:
-        assert cfg.source_dataset.im_size == cfg.test_dataset.im_size
         dataset_kwargs_trafo = {
             'name': cfg.test_dataset.name,
             'im_size': cfg.source_dataset.im_size, 
@@ -40,11 +40,11 @@ def coordinator(cfg : DictConfig) -> None:
         }
 
     base_reconstructor = DeepImagePrior(
-                ray_trafo, 
-                torch_manual_seed=cfg.dip.torch_manual_seed,
-                device=device, 
-                net_kwargs=net_kwargs
-            )
+        ray_trafo, 
+        torch_manual_seed=cfg.dip.torch_manual_seed,
+        device=device, 
+        net_kwargs=net_kwargs
+        )
     
     if cfg.load_dip_models_from_path is not None: 
         base_reconstructor.load_pretrain_model(
@@ -78,15 +78,31 @@ def coordinator(cfg : DictConfig) -> None:
         }
     }
 
-    dataset_kwargs = {
-        'im_size': cfg.source_dataset.im_size,
-        'length':{
-            'train': cfg.source_dataset.length.train,
-            'validation': cfg.source_dataset.length.validation,
-            },
-        'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
-        'use_fixed_seeds_starting_from': cfg.seed, 
-    }
+    if cfg.source_dataset.name == 'ellipses': 
+        dataset_kwargs = {
+            'name': cfg.source_dataset.name,
+            'im_size': cfg.source_dataset.im_size,
+            'length':{
+                'train': cfg.source_dataset.length.train,
+                'validation': cfg.source_dataset.length.validation,
+                },
+            'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_fixed_seeds_starting_from': cfg.seed, 
+        } 
+    elif cfg.source_dataset.name == 'disk_dist_ellipses':
+        dataset_kwargs = {
+            'name': cfg.source_dataset.name,
+            'im_size': cfg.source_dataset.im_size,
+            'diameter': cfg.source_dataset.diameter,
+            'length':{
+                'train': cfg.source_dataset.length.train,
+                'validation': cfg.source_dataset.length.validation,
+                },
+            'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_fixed_seeds_starting_from': cfg.seed,
+        }
+    else: 
+        raise  NotImplementedError
 
     sampler.sample(
         ray_trafo=ray_trafo,

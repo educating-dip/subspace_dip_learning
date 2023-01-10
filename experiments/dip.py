@@ -12,13 +12,23 @@ def coordinator(cfg : DictConfig) -> None:
 
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
+    
+    if cfg.test_dataset.name in ['walnut']:
+        dataset_kwargs_trafo = {
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size,
+            'data_path': cfg.test_dataset.data_path,
+            'walnut_id': cfg.test_dataset.walnut_id
+            }
+    else:
+        dataset_kwargs_trafo = {
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size
+            }
 
     ray_trafo = get_standard_ray_trafo(
-        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
-        dataset_kwargs={
-            'name': cfg.test_dataset.name,
-            'im_size': cfg.test_dataset.im_size 
-        }
+        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo),
+        dataset_kwargs=dataset_kwargs_trafo,
     )    
     ray_trafo.to(dtype=dtype, device=device)
 
@@ -42,6 +52,7 @@ def coordinator(cfg : DictConfig) -> None:
     dataset = get_standard_test_dataset(
         ray_trafo,
         dataset_kwargs=OmegaConf.to_object(cfg.test_dataset),
+        trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
         use_fixed_seeds_starting_from=cfg.seed,
         device=device, 
     )
