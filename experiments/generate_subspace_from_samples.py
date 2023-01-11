@@ -9,13 +9,23 @@ def coordinator(cfg : DictConfig) -> None:
 
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
+    
+    if cfg.test_dataset.name in ['walnut']:
+        dataset_kwargs_trafo = {
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size,
+            'data_path': cfg.test_dataset.data_path,
+            'walnut_id': cfg.test_dataset.walnut_id
+            }
+    else:
+        dataset_kwargs_trafo = {
+            'name': cfg.test_dataset.name,
+            'im_size': cfg.test_dataset.im_size
+            }
 
     ray_trafo = get_standard_ray_trafo( # placeholder 
         ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
-        dataset_kwargs={
-            'name': cfg.source_dataset.name,
-            'im_size': cfg.source_dataset.im_size 
-        }
+        dataset_kwargs=dataset_kwargs_trafo
     )    
     ray_trafo.to(dtype=dtype, device=device)
 
@@ -53,6 +63,7 @@ def coordinator(cfg : DictConfig) -> None:
         subspace_dim=cfg.subspace.subspace_dim,
         use_random_init=cfg.subspace.use_random_init,
         num_random_projs=cfg.subspace.num_random_projs,
+        use_approx=cfg.subspace.use_approx,
         device=device
     )
     

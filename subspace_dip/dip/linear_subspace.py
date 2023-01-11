@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 
 from .utils import gramschmidt
 from subspace_dip.utils import get_original_cwd
-from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils import PSNR, tv_loss
 from subspace_dip.data import BaseRayTrafo
 
@@ -26,6 +25,7 @@ class LinearSubspace(nn.Module):
         use_random_init: bool = True,
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
+        use_approx: bool = False, 
         load_ortho_basis_path: Optional[str] = None,
         device = None
         ) -> None:
@@ -41,7 +41,8 @@ class LinearSubspace(nn.Module):
             self.parameters_samples_list = parameters_samples_list
             self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
                 subspace_dim=subspace_dim,
-                num_random_projs=num_random_projs, 
+                num_random_projs=num_random_projs,
+                use_approx=use_approx
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
@@ -49,7 +50,7 @@ class LinearSubspace(nn.Module):
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
 
-    def init_parameters(self, 
+    def init_parameters(self,
         use_random_init: bool = True, 
         ) -> None:
     
@@ -89,8 +90,9 @@ class LinearSubspace(nn.Module):
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
         return_singular_values: Optional[bool] = True,
-        device = None, 
-        use_cpu: bool = True
+        device = None,
+        use_cpu: bool = True, 
+        use_approx: bool = False
         ) -> Tensor:
 
         def _add_random_projs(
@@ -109,11 +111,18 @@ class LinearSubspace(nn.Module):
             torch.stack(self.parameters_samples_list), (0, 1), (1, 0)
             ) # (num_params, subspace_dim)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
-        ortho_bases, singular_values, _  = tl.partial_svd(
-            params_mat, 
-            n_eigenvecs=subspace_dim
-            )
-        
+
+        if not use_approx: 
+            ortho_bases, singular_values, _  = tl.partial_svd(
+                params_mat, 
+                n_eigenvecs=subspace_dim
+                )
+        else:
+            ortho_bases, singular_values, _ = torch.svd_lowrank(
+                params_mat, 
+                q=subspace_dim
+                )
+
         if num_random_projs is not None: 
             ortho_bases = _add_random_projs(
                 ortho_bases=ortho_bases,
