@@ -167,18 +167,22 @@ class FisherInfo:
 
     def exact_fisher_vp(self,             
         v: Tensor,
-        use_forward_op: bool = True,
+        forward_op_as_part_of_model: bool = True,
         use_square_root: bool = False
         ) -> Tensor:
 
-            _fnet_single = partial(self._fnet_single, use_forward_op=use_forward_op)
+            _fnet_single = partial(self._fnet_single, forward_op_as_part_of_model=forward_op_as_part_of_model)
             _, jvp_ = jvp(_fnet_single, 
                     (self.subspace_dip.subspace.parameters_vec,), (v,)
                 ) # jvp_ = v @ J_cT = v @ (UT JT AT)
+            if not forward_op_as_part_of_model:
+                jvp_ = self.subspace_dip.ray_trafo(jvp_)
             if not use_square_root: 
                 _, _vjp_fn = vjp(_fnet_single,
                             self.subspace_dip.subspace.parameters_vec
                         )
+                if not forward_op_as_part_of_model: 
+                    jvp_ = self.subspace_dip.ray_trafo.trafo_adjoint(jvp_)
                 Fv = _vjp_fn(jvp_)[0] # Fv = jvp_ @ J_c = jvp_ @ (A J U)
             else: 
                 Fv = jvp_
@@ -187,24 +191,24 @@ class FisherInfo:
     def _fnet_single(self,
         parameters_vec: Tensor,
         input: Optional[Tensor] = None,
-        use_forward_op: bool = True
+        forward_op_as_part_of_model: bool = True
         ) -> Tensor:
 
         out = self.subspace_dip.forward(
                 parameters_vec=parameters_vec,
                 input=input,
-                **{'use_forward_op':use_forward_op}
+                **{'apply_forward_op':forward_op_as_part_of_model}
             )
         return out
 
     def exact_fisher_assembly(self, 
         dataset: Optional[DataLoader] = None,
-        use_forward_op: bool = True
+        forward_op_as_part_of_model: bool = True
         ) -> Tensor:
 
         def _per_input_exact_update(fbp: Optional[Tensor] = None): 
                 
-            _fnet_single = partial(self._fnet_single,use_forward_op=use_forward_op)
+            _fnet_single = partial(self._fnet_single, forward_op_as_part_of_model=forward_op_as_part_of_model)
             if fbp is None:
                 jac = jacrev(_fnet_single)(self.subspace_dip.subspace.parameters_vec)
             else:
@@ -215,6 +219,12 @@ class FisherInfo:
             jac = jac.view(fbp.shape[0] if fbp is not None else 1, #batch_size,
                     -1, self.subspace_dip.subspace.num_subspace_params
                 ) # the inferred dim is im_shape: nn_model_output
+            
+            if not forward_op_as_part_of_model:
+                perm_jac = torch.permute(jac, (1, 0, 2)).view(jac.shape[1], -1)
+                perm_jac = self.subspace_dip.ray_trafo.trafo_flat(perm_jac)
+                jac = perm_jac.view(perm_jac.shape[0], jac.shape[0], jac.shape[2])
+                jac = torch.permute(jac, (1, 0, 2))
             return jac # (batch_size, nn_model_output, num_subspace_params)
         
         with torch.no_grad():
@@ -236,17 +246,17 @@ class FisherInfo:
     def initialise_fisher_info(self,
         dataset: Optional[DataLoader] = None,
         num_random_vecs: int = 100, 
-        use_forward_op: bool = True,
+        forward_op_as_part_of_model: bool = True,
         mode: str = 'full'
         ) -> Tensor:
         
         if mode == 'full':
             matrix, _ = self.exact_fisher_assembly(dataset=dataset,
-                use_forward_op=use_forward_op
+                forward_op_as_part_of_model=forward_op_as_part_of_model
             )
         elif mode == 'vjp_rank_one':
             matrix = self.online_fisher_assembly(dataset=dataset,
-                num_random_vecs=num_random_vecs, use_forward_op=use_forward_op
+                num_random_vecs=num_random_vecs, forward_op_as_part_of_model=forward_op_as_part_of_model
             )
         else: 
             raise NotImplementedError
@@ -256,20 +266,27 @@ class FisherInfo:
     def online_fisher_assembly(self,
         dataset: Optional[DataLoader] = None,
         num_random_vecs: int = 10,
-        use_forward_op: bool = True
+        forward_op_as_part_of_model: bool = True
         ) -> Tensor:
-        
-        if not use_forward_op: 
-            shape = self.subspace_dip.ray_trafo.im_shape
-        else: 
-            shape = self.subspace_dip.ray_trafo.obs_shape
 
         def _per_input_rank_one_update(fbp: Optional[Tensor] = None):
+            
+            obs_shape = self.subspace_dip.ray_trafo.obs_shape
+            im_shape = self.subspace_dip.ray_trafo.im_shape
 
-            v = self.probes.sample_probes(num_random_vecs=num_random_vecs, shape=shape)
+            v = self.probes.sample_probes(
+                num_random_vecs=num_random_vecs, 
+                shape=self.subspace_dip.ray_trafo.obs_shape
+                )
+
+            if not forward_op_as_part_of_model: 
+                v = self.subspace_dip.ray_trafo.trafo_adjoint(
+                        v.view(v.shape[0]*v.shape[1], v.shape[2], *obs_shape)
+                    ).view(*v.shape[0:3], *im_shape)
+
             _fnet_single = partial(self._fnet_single,
                 input=fbp,
-                use_forward_op=use_forward_op
+                forward_op_as_part_of_model=forward_op_as_part_of_model
                 )
             _, _vjp_fn = vjp(_fnet_single,
                     self.subspace_dip.subspace.parameters_vec
@@ -301,17 +318,17 @@ class FisherInfo:
         dataset: Optional[DataLoader] = None,
         curvature_ema: float = 0.95,
         num_random_vecs: Optional[int] = 10,
-        use_forward_op: bool = True,
+        forward_op_as_part_of_model: bool = True,
         mode: str = 'full'
         ) -> None:
 
         if mode == 'full':
             update, _ = self.exact_fisher_assembly(
-                dataset=dataset, use_forward_op=use_forward_op
+                dataset=dataset, forward_op_as_part_of_model=forward_op_as_part_of_model
             )
         elif mode == 'vjp_rank_one':
             update = self.online_fisher_assembly(dataset=dataset,
-                use_forward_op=use_forward_op, num_random_vecs=num_random_vecs
+                forward_op_as_part_of_model=forward_op_as_part_of_model, num_random_vecs=num_random_vecs
             )
         else:
             raise NotImplementedError

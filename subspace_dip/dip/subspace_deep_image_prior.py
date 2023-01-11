@@ -88,7 +88,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             parameters_vec: Optional[Tensor] = None, 
             input: Optional[Tensor] = None, 
             slicing_sequence: Optional[Sequence] = None, 
-            use_forward_op: bool = True
+            apply_forward_op: bool = True
         ) -> Tensor:
 
         out = self.func_model_with_input(
@@ -99,7 +99,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         ), 
                 self.net_input if input is None else input
             )
-        return out if not use_forward_op else self.ray_trafo(out)
+        return out if not apply_forward_op else self.ray_trafo(out)
 
     def objective(self,
         criterion,
@@ -107,7 +107,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         use_tv_loss: Optional[bool] = None,
         parameters_vec: Optional[Tensor] = None, 
         slicing_sequence: Optional[Sequence] = None,
-        use_forward_op: bool = False,
+        apply_forward_op: bool = False,
         weight_decay: Optional[float] = None, 
         gamma: Optional[float] = None, 
         return_output: Optional[bool] = True
@@ -116,7 +116,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         output = self.forward(
                 parameters_vec=parameters_vec,
                 slicing_sequence=slicing_sequence,
-                use_forward_op=use_forward_op
+                apply_forward_op=apply_forward_op
             )
 
         loss = criterion(self.ray_trafo(output), noisy_observation)
@@ -181,7 +181,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 )
             curvature_update_kwargs = {
                 'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
-                'use_forward_op': True,
+                'forward_op_as_part_of_model': optim_kwargs['optim']['forward_op_as_part_of_model'],
                 'mode': optim_kwargs['optim']['mode'], 
                 'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema']
             }
@@ -270,7 +270,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         return loss
 
                     loss = self.optimizer.step(closure)
-                    output = self.forward(use_forward_op=False)
+                    output = self.forward(apply_forward_op=False)
 
                 elif optim_kwargs['optim']['optimizer'] == 'ngd':
                     

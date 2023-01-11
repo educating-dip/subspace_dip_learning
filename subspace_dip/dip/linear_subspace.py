@@ -185,7 +185,7 @@ class LinearSubspace(nn.Module):
                         # forward
                         outputs = subspace_dip(
                                 input=fbp, 
-                                use_forward_op=False
+                                apply_forward_op=False
                             )
                         loss = criterion(ray_trafo(outputs), observation) 
                         loss = loss + optim_kwargs['optim']['gamma']*tv_loss(outputs)

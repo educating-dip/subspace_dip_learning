@@ -189,7 +189,7 @@ def _single_tensor_ngd(
 
     curvature_matrix_update_kwargs =  {
         'num_random_vecs': curvature_kwargs['num_random_vecs'],
-        'use_forward_op': curvature_kwargs['use_forward_op'],
+        'forward_op_as_part_of_model': curvature_kwargs['forward_op_as_part_of_model'],
         'mode': curvature_kwargs['mode']
     }
 
@@ -235,6 +235,7 @@ def _single_tensor_ngd(
             use_adaptive_momentum=use_adaptive_momentum,
             old_step=old_step, 
             weight_decay=weight_decay,
+            forward_op_as_part_of_model=curvature_kwargs['forward_op_as_part_of_model'],
             curvature_reduction_scale=curvature_reduction_scale, 
             use_approximate_quad_model=use_approximate_quad_model
         )
@@ -268,6 +269,7 @@ def _single_tensor_ngd(
             step=step,
             current_hyperparam=current_damping,
             curvature_reduction_scale=curvature_reduction_scale,
+            forward_op_as_part_of_model=curvature_kwargs['forward_op_as_part_of_model'],
             **damping_adaptive_kwargs
         )
         curvature.curvature_damping.damping = updated_damping
@@ -295,6 +297,7 @@ def _single_tensor_ngd(
             change_in_objective=change_in_objective,
             current_hyperparam=curvature_reduction_scale,
             curvature_reduction_scale=curvature_reduction_scale,
+            forward_op_as_part_of_model=curvature_kwargs['forward_op_as_part_of_model'],
             **curvature_reduction_adaptive_kwargs
         )
         curvature_reduction_scale = updated_curvature_reduction_scale
@@ -325,6 +328,7 @@ def _compute_the_optimal_coefficients_via_quad_model(
         descent_directions: Tensor,
         old_step: Tensor,
         use_adaptive_momentum: bool = True,
+        forward_op_as_part_of_model: bool = True, 
         weight_decay: float = 0., 
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 1., 
@@ -337,17 +341,19 @@ def _compute_the_optimal_coefficients_via_quad_model(
     regulariser = curvature.curvature_damping.damping + weight_decay
     Δ = - natural_descent_directions
     if not use_approximate_quad_model: 
-        JcΔ = curvature.exact_fisher_vp(Δ, use_square_root=True).flatten()  
+        JcΔ = curvature.exact_fisher_vp(Δ, use_square_root=True, 
+            forward_op_as_part_of_model=forward_op_as_part_of_model).flatten()  
     else: 
         JcΔ = curvature.approx_fisher_vp(Δ, use_square_root=True)
 
     ΔTΔ = torch.dot(Δ, Δ)
     ΔTFΔ = torch.dot(JcΔ, JcΔ) + (ΔTΔ * regulariser)
     if use_adaptive_momentum:
-        if not use_approximate_quad_model: 
+        if not use_approximate_quad_model:
             Jcold_step = curvature.exact_fisher_vp(
-                old_step, use_square_root=True
-                ).flatten()  
+                old_step, use_square_root=True, 
+                forward_op_as_part_of_model=forward_op_as_part_of_model
+                ).flatten()
         else: 
             Jcold_step = curvature.approx_fisher_vp(old_step, use_square_root=True)
         old_stepTold_step = torch.dot(old_step, old_step)
@@ -367,6 +373,7 @@ def _get_quad_model(
         descent_directions: Tensor, # F^-1 ∇h 
         step: Tensor,
         weight_decay: float,
+        forward_op_as_part_of_model: bool = True, 
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 1.
     ) -> Tuple[Tensor, Tensor]:
@@ -375,7 +382,7 @@ def _get_quad_model(
     assert descent_directions.ndim == step.ndim
     regulariser = curvature.curvature_damping.damping + weight_decay
     Jc𝛿 = curvature.exact_fisher_vp(step,
-            use_square_root=True
+            use_square_root=True, forward_op_as_part_of_model=forward_op_as_part_of_model
                 ).flatten() if not use_approximate_quad_model else curvature.approx_fisher_vp(step,
                     use_square_root=True
                     )
@@ -390,6 +397,7 @@ def _compute_quadratic_model_value(
         descent_directions: Tensor,
         step: Tensor,
         weight_decay: float,
+        forward_op_as_part_of_model: bool = True, 
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 1.
     ) -> Tensor:
@@ -399,6 +407,7 @@ def _compute_quadratic_model_value(
         descent_directions=descent_directions, 
         step=step, 
         weight_decay=weight_decay,
+        forward_op_as_part_of_model=forward_op_as_part_of_model,
         use_approximate_quad_model=use_approximate_quad_model, 
         curvature_reduction_scale=curvature_reduction_scale
         )
@@ -414,6 +423,7 @@ def _update_hyperparam_based_on_reduction_ratio(
         current_hyperparam: float,
         pred_change: Optional[Tensor] = None, 
         change_in_objective: Optional[Tensor] = None,
+        forward_op_as_part_of_model: bool = True, 
         weight_decay: float = 0.,
         min_hyperparam: float = 1e-0,
         max_hyperparam: float = 100.,
@@ -434,7 +444,9 @@ def _update_hyperparam_based_on_reduction_ratio(
             curvature=curvature,
             # ∇h at this point params_with_grad have been updated but not the grads
             step=step, descent_directions=params_with_grad.grad,
-            weight_decay=weight_decay, use_approximate_quad_model=use_approximate_quad_model,
+            weight_decay=weight_decay,
+            forward_op_as_part_of_model=forward_op_as_part_of_model,
+            use_approximate_quad_model=use_approximate_quad_model,
             curvature_reduction_scale=curvature_reduction_scale)
 
         # at this point params_with_grad have been updated

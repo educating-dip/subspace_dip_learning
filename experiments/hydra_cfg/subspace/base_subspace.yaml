@@ -5,6 +5,7 @@ subsampling_orthospace:
 num_random_projs: null
 use_random_init: True
 use_approx: False
+forward_op_as_part_of_model: True
 ortho_basis_path: ./
 fine_tuning:
   iterations: 10000

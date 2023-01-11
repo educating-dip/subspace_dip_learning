@@ -129,7 +129,8 @@ def coordinator(cfg : DictConfig) -> None:
                     'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
                     'mode': cfg.subspace.fisher_info.mode,
                     'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
-                    'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs), 
+                    'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs),
+                    'forward_op_as_part_of_model': cfg.subspace.forward_op_as_part_of_model,
                     'return_stats': cfg.subspace.fisher_info.return_stats
                 })
             fisher_info.reset_fisher_matrix()
