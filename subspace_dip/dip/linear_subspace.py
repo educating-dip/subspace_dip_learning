@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch as Tensor
 import torch.nn as nn
-import tensorly as tl 
+import tensorly as tl
 tl.set_backend('pytorch')
 import tensorboardX
 
@@ -25,7 +25,8 @@ class LinearSubspace(nn.Module):
         use_random_init: bool = True,
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
-        use_approx: bool = False, 
+        use_approx: bool = False,
+        remove_first_n_samples: Optional[int] = None,
         load_ortho_basis_path: Optional[str] = None,
         device = None
         ) -> None:
@@ -42,7 +43,8 @@ class LinearSubspace(nn.Module):
             self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
                 subspace_dim=subspace_dim,
                 num_random_projs=num_random_projs,
-                use_approx=use_approx
+                use_approx=use_approx, 
+                remove_first_n_samples=remove_first_n_samples
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
@@ -92,7 +94,8 @@ class LinearSubspace(nn.Module):
         return_singular_values: Optional[bool] = True,
         device = None,
         use_cpu: bool = True, 
-        use_approx: bool = False
+        use_approx: bool = False, 
+        remove_first_n_samples: Optional[int] = None
         ) -> Tensor:
 
         def _add_random_projs(
@@ -112,18 +115,27 @@ class LinearSubspace(nn.Module):
             ) # (num_params, subspace_dim)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
 
-        if not use_approx: 
+        if not use_approx:
+            # https://github.com/tensorly/tensorly/blob/15d9647e08dee10c990fe2731a1b92db6428bad9/tensorly/contrib/sparse/backend/numpy_backend.py
             ortho_bases, singular_values, _  = tl.partial_svd(
-                params_mat, 
+                params_mat,
                 n_eigenvecs=subspace_dim
                 )
         else:
-            ortho_bases, singular_values, _ = torch.svd_lowrank(
-                params_mat, 
-                q=subspace_dim
-                )
+            # https://docs.dask.org/en/stable/generated/dask.array.linalg.svd_compressed.html
+            # params_mat_da = da.from_array(
+            #         params_mat.numpy() if not params_mat.is_cuda else params_mat.cpu().numpy()
+            #     )
+            # out = da.linalg.svd_compressed(params_mat_da, k=subspace_dim)
+            # ortho_bases = torch.from_numpy(out[0].persist().compute())
+            # singular_values = torch.from_numpy(out[1].persist().compute())
+            if remove_first_n_samples is None: 
+                remove_first_n_samples = 0
 
-        if num_random_projs is not None: 
+            ortho_bases, singular_values, _ = torch.svd_lowrank(
+                params_mat[:, remove_first_n_samples:], q=subspace_dim) # analogous as commented above
+
+        if num_random_projs is not None:
             ortho_bases = _add_random_projs(
                 ortho_bases=ortho_bases,
                 num_random_projs=num_random_projs
@@ -134,8 +146,8 @@ class LinearSubspace(nn.Module):
         -------
         ortho_bases : Tensor Size. (num_params, subspace_dim or subspace_dim+num_random_projs)
         """
-        return ortho_bases.detach().to(device=device) if not return_singular_values else (
-            ortho_bases.detach().to(device=device), singular_values.detach().to(device=device)
+        return ortho_bases.to(device=device) if not return_singular_values else (
+            ortho_bases.to(device=device), singular_values.to(device=device)
         )
 
     def set_parameters_on_valset(self,

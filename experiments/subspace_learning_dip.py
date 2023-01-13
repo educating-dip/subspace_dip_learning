@@ -111,17 +111,5 @@ def coordinator(cfg : DictConfig) -> None:
         save_samples=cfg.sampler.sampling.save_samples
     )
 
-    subspace = LinearSubspace(
-        parameters_samples_list=sampler.parameters_samples, 
-        subspace_dim=cfg.subspace.subspace_dim,
-        use_random_init=cfg.subspace.use_random_init,
-        num_random_projs=cfg.subspace.num_random_projs,
-        device=device
-    )
-    
-    subspace.save_ortho_basis(
-        ortho_basis_path=cfg.subspace.ortho_basis_path
-        )
-
 if __name__ == '__main__':
     coordinator()

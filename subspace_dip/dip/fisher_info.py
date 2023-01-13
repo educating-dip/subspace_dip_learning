@@ -45,8 +45,11 @@ class SamplingProbes:
             assert self.prxy_mat is not None
             assert  self.prxy_mat.ndim == 2
 
-            un_ps = torch.linalg.norm(self.prxy_mat, dim=1, ord=2).pow(2)
-            const = un_ps.sum()
+            if not self.prxy_mat.is_sparse:
+                un_ps = torch.linalg.norm(self.prxy_mat, dim=1, ord=2).pow(2)
+            else:
+                un_ps = torch.sparse.sum(self.prxy_mat**2, dim=1).to_dense()            
+                const = un_ps.sum()
             self.ps = un_ps/const
 
         elif self.mode == 'gauss': 
