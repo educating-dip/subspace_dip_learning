@@ -49,7 +49,7 @@ class SamplingProbes:
                 un_ps = torch.linalg.norm(self.prxy_mat, dim=1, ord=2).pow(2)
             else:
                 un_ps = torch.sparse.sum(self.prxy_mat**2, dim=1).to_dense()            
-                const = un_ps.sum()
+            const = un_ps.sum()
             self.ps = un_ps/const
 
         elif self.mode == 'gauss': 

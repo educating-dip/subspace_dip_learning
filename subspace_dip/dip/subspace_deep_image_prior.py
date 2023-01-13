@@ -60,17 +60,22 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             slicing_sequence: Optional[Sequence] = None, 
         ) -> Tuple[Tensor]:
 
-        weights = self.pretrained_weights
+        weights = self.pretrained_weights.clone()
         if slicing_sequence is None: # θ = γ(c) = θ_p + \sum_i c_i * u_i
-            weights = weights + torch.inner(
+            sub_weights = torch.inner(
                     self.subspace.parameters_vec if parameters_vec is None \
                         else parameters_vec, self.subspace.ortho_basis
                     )
         else:
-            weights = weights + torch.inner(
+            sub_weights = torch.inner(
                     self.subspace.parameters_vec[slicing_sequence] if parameters_vec is None \
                         else parameters_vec[slicing_sequence], self.subspace.ortho_basis[:, slicing_sequence]
                     )
+
+        if self.subspace.is_trimmed:
+            weights[self.subspace.indices] = weights[self.subspace.indices] + sub_weights
+        else:
+            weights = weights + sub_weights
         cnt = 0
         func_weights = []
         for params in self.nn_model.parameters():

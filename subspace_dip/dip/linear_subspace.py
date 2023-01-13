@@ -10,7 +10,7 @@ import torch.nn as nn
 import tensorly as tl
 tl.set_backend('pytorch')
 import tensorboardX
-
+from math import ceil 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -28,6 +28,7 @@ class LinearSubspace(nn.Module):
         use_approx: bool = False,
         remove_first_n_samples: Optional[int] = None,
         load_ortho_basis_path: Optional[str] = None,
+        params_space_retain_ftc: Optional[float] = None,
         device = None
         ) -> None:
 
@@ -49,11 +50,26 @@ class LinearSubspace(nn.Module):
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
 
+        self.params_space_retain_ftc = params_space_retain_ftc
+        self.is_trimmed = False
+        if self.params_space_retain_ftc is not None:
+            self.is_trimmed = True
+            self._trimming_params_in_subspace()
+
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
+    
+    def _trimming_params_in_subspace(self):
+
+        lev_score = self.ortho_basis.pow(2).sum(dim=1) # sum over subspace_dim
+        num_params_to_be_retained = ceil(self.params_space_retain_ftc*self.ortho_basis.shape[0])
+        _, indices = torch.topk(lev_score, k=num_params_to_be_retained)
+        # (num_params, subspace_dim) -> (num_params_to_be_retained, subspace_dim)
+        self.ortho_basis = self.ortho_basis[indices, :] # this frees memory due to indices being array 
+        self.indices = indices.tolist()
 
     def init_parameters(self,
-        use_random_init: bool = True, 
+        use_random_init: bool = True,
         ) -> None:
     
         init_parameters = torch.zeros(

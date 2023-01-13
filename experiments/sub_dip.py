@@ -60,6 +60,7 @@ def coordinator(cfg : DictConfig) -> None:
         use_random_init=cfg.subspace.use_random_init,
         num_random_projs=cfg.subspace.num_random_projs,
         load_ortho_basis_path=cfg.subspace.ortho_basis_path,
+        params_space_retain_ftc=cfg.subspace.params_space_retain_ftc,
         device=device
     )
 
