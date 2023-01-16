@@ -64,7 +64,7 @@ class NGD(Optimizer):
             use_adaptive_momentum: bool = False,
             use_adaptive_damping: bool = False,
             use_approximate_quad_model: bool = False,
-            max_length_memory: int = 5,
+            adaptation_interval: int = 5,
             closure=None,
             return_stats: bool = False
             ):
@@ -91,6 +91,7 @@ class NGD(Optimizer):
             use_adaptive_momentum=use_adaptive_momentum,
             use_adaptive_damping=use_adaptive_damping,
             use_approximate_quad_model=use_approximate_quad_model,
+            adaptation_interval=adaptation_interval,
             old_step=self.old_step,
             step_cnt=self.step_cnt,
             closure=closure,
@@ -256,7 +257,7 @@ def _single_tensor_ngd(
             'adaptation_decay': adaptation_decay,
             'lower_threshold': lower_threshold,
             'upper_threshold': upper_threshold,
-            'min_hyperparam': min_hyperparam,
+            'min_hyperparam': curvature_kwargs['min_damping_value'] if not None else min_hyperparam,
             'max_hyperparam': max_hyperparam,
             'use_approximate_quad_model': use_approximate_quad_model
             }
@@ -306,7 +307,7 @@ def _single_tensor_ngd(
     if return_stats and (step_cnt + 1) % stats_interval == 0:
         stats = {
             'rho': rho.item() if 'rho' in locals() else 0.,
-            'model_change': change if 'change' in locals() else 0.,
+            'model_change': pred_change if 'change' in locals() else 0.,
             'curvature_damping': curvature.curvature_damping.damping,
             'lr': lr,
             'momentum': momentum if hasattr(momentum, 'item') else momentum,

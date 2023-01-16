@@ -188,7 +188,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
                 'forward_op_as_part_of_model': optim_kwargs['optim']['forward_op_as_part_of_model'],
                 'mode': optim_kwargs['optim']['mode'], 
-                'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema']
+                'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema'], 
+                'min_damping_value': optim_kwargs['optim']['min_damping_value']
             }
             if optim_kwargs['optim']['update_curvature_ema']:
           

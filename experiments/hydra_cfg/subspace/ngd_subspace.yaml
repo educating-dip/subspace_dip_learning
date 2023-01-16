@@ -18,6 +18,7 @@ fisher_info:
   num_random_vecs: 100
   static_curvature_ema: 0.95
   update_curvature_ema: True
+  min_damping_value: 1e-8
   curvature_ema_kwargs:
     max_iterations: 200
     base_curvature_ema: 0.5

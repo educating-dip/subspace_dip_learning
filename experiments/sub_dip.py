@@ -132,6 +132,7 @@ def coordinator(cfg : DictConfig) -> None:
                     'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
                     'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs),
                     'forward_op_as_part_of_model': cfg.subspace.forward_op_as_part_of_model,
+                    'min_damping_value': cfg.subspace.fisher_info.min_damping_value,
                     'return_stats': cfg.subspace.fisher_info.return_stats
                 })
             fisher_info.reset_fisher_matrix()

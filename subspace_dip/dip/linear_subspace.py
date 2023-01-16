@@ -50,11 +50,13 @@ class LinearSubspace(nn.Module):
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
 
-        self.params_space_retain_ftc = params_space_retain_ftc
-        self.is_trimmed = False
-        if self.params_space_retain_ftc is not None:
-            self.is_trimmed = True
-            self._trimming_params_in_subspace()
+            self.params_space_retain_ftc = params_space_retain_ftc
+            self.is_trimmed = False
+            if self.params_space_retain_ftc is not None:
+                self.is_trimmed = True
+                self._trimming_params_in_subspace()
+            self.ortho_basis = self.ortho_basis.to(self.device)
+            self.singular_values = self.singular_values.to(self.device)
 
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
@@ -65,7 +67,8 @@ class LinearSubspace(nn.Module):
         num_params_to_be_retained = ceil(self.params_space_retain_ftc*self.ortho_basis.shape[0])
         _, indices = torch.topk(lev_score, k=num_params_to_be_retained)
         # (num_params, subspace_dim) -> (num_params_to_be_retained, subspace_dim)
-        self.ortho_basis = self.ortho_basis[indices, :] # this frees memory due to indices being array 
+        self.ortho_basis = self.ortho_basis[indices, :] # this frees memory due to indices being array
+        torch.cuda.empty_cache()
         self.indices = indices.tolist()
 
     def init_parameters(self,
@@ -101,8 +104,8 @@ class LinearSubspace(nn.Module):
         path = os.path.join(get_original_cwd(), 
             ortho_basis_path if ortho_basis_path.endswith('.pt') \
                 else ortho_basis_path + '.pt')
-        self.ortho_basis = torch.load(path, map_location=self.device)['ortho_basis']
-        self.singular_values = torch.load(path, map_location=self.device)['singular_values']
+        self.ortho_basis = torch.load(path, map_location='cpu')['ortho_basis']
+        self.singular_values = torch.load(path, map_location='cpu')['singular_values']
 
     def extract_ortho_basis_subspace(self,
         subspace_dim: Optional[int] = None,
