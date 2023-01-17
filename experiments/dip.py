@@ -15,7 +15,7 @@ def coordinator(cfg : DictConfig) -> None:
     
     if cfg.test_dataset.name in ['walnut']:
         dataset_kwargs_trafo = {
-            'name': cfg.test_dataset.name,
+            'name': cfg.test_dataset.name, # proxy for disk_dist_ellipses
             'im_size': cfg.test_dataset.im_size,
             'data_path': cfg.test_dataset.data_path,
             'walnut_id': cfg.test_dataset.walnut_id

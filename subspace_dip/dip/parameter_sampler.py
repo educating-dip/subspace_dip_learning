@@ -103,7 +103,7 @@ class ParameterSampler:
         self.init_optimizer(optim_kwargs=optim_kwargs)
 
 
-        if dataset_kwargs['name'] == 'ellipses':
+        if dataset_kwargs['name'] in ('ellipses', 'ellipses_mayo'):
 
             dataset_train = get_ellipses_dataset(
                 ray_trafo=ray_trafo, 

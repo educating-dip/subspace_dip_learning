@@ -78,7 +78,7 @@ def coordinator(cfg : DictConfig) -> None:
         }
     }
 
-    if cfg.source_dataset.name == 'ellipses': 
+    if cfg.source_dataset.name in ('ellipses', 'ellipses_mayo'): 
         dataset_kwargs = {
             'name': cfg.source_dataset.name,
             'im_size': cfg.source_dataset.im_size,

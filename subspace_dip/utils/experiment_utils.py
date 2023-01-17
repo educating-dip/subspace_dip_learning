@@ -15,7 +15,7 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     if dataset_kwargs['name'] in ('ellipses', 'rectangles', 'walnut_patches', 'cartoonset'):
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
-    elif dataset_kwargs['name'] in ('mayo', ): 
+    elif dataset_kwargs['name'] in ('mayo', 'ellipses_mayo'): 
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
         kwargs['src_radius'] = ray_trafo_kwargs['src_radius']
