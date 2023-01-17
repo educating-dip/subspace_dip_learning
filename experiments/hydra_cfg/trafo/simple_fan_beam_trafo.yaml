@@ -1,4 +1,4 @@
-num_angles: 200
+num_angles: 1000
 angular_sub_sampling: 1
 src_radius: 700
 det_radius: 700

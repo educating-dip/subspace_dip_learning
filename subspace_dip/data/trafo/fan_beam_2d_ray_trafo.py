@@ -80,7 +80,7 @@ class FanBeam2DRayTrafo(BaseRayTrafo):
         odl_ray_trafo = odl.tomo.RayTransform(
                 odl_ray_trafo_full.domain,
                 odl_ray_trafo_full.geometry[::angular_sub_sampling], impl=impl)
-        odl_fbp = odl.tomo.fbp_op(odl_ray_trafo)
+        odl_fbp = odl.tomo.fbp_op(odl_ray_trafo, filter_type='Hann')
         obs_shape = odl_ray_trafo.range.shape
 
         super().__init__(im_shape=im_shape, obs_shape=obs_shape)

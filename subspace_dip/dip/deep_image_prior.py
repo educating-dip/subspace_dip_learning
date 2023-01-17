@@ -122,6 +122,9 @@ class DeepImagePrior(BaseDeepImagePrior):
        
         writer.add_image('filtbackproj', normalize(
                filtbackproj[0, ...]).cpu().numpy(), 0)
+        if ground_truth is not None:
+            writer.add_image('ground_truth', normalize(
+                ground_truth[0, ...]).cpu().numpy(), 0)
 
         with tqdm(range(optim_kwargs['iterations']), desc='DIP', disable=not show_pbar) as pbar:
 
