@@ -118,8 +118,15 @@ class FisherInfo:
         self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
         self._curvature_ema = curvature_ema
+
+        if hasattr(self.subspace_dip.ray_trafo, 'matrix'): 
+            prxy_mat = self.subspace_dip.ray_trafo.matrix 
+        else:
+            prxy_mat = None 
+            assert sampling_probes_mode != 'row_norm'
+
         self.probes = SamplingProbes(
-                prxy_mat=self.subspace_dip.ray_trafo.matrix, 
+                prxy_mat=prxy_mat,
                 mode=sampling_probes_mode, 
                 device=self.subspace_dip.device
             )

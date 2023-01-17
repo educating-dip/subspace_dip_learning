@@ -1,0 +1,5 @@
+num_angles: 200
+angular_sub_sampling: 1
+src_radius: 700
+det_radius: 700
+load_mat_from_path: null

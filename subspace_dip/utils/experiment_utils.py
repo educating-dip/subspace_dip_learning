@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, TensorDataset
 from subspace_dip.data import get_ray_trafo, SimulatedDataset
 from subspace_dip.data import (
         RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, 
-        CartoonSetDataset, get_walnut_2d_observation, get_walnut_2d_ground_truth
+        CartoonSetDataset, MayoDataset, get_walnut_2d_observation, get_walnut_2d_ground_truth
     )
 from .utils import get_original_cwd
 
@@ -15,7 +15,13 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     if dataset_kwargs['name'] in ('ellipses', 'rectangles', 'walnut_patches', 'cartoonset'):
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
-    elif dataset_kwargs['name'] in ('walnut'):
+    elif dataset_kwargs['name'] in ('mayo', ): 
+        kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
+        kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
+        kwargs['src_radius'] = ray_trafo_kwargs['src_radius']
+        kwargs['det_radius'] = ray_trafo_kwargs['det_radius']
+        # kwargs['load_mat_from_path'] = ray_trafo_kwargs['load_mat_from_path']
+    elif dataset_kwargs['name'] in ('walnut', ):
         kwargs['data_path'] = os.path.join(get_original_cwd(), dataset_kwargs['data_path'])
         kwargs['matrix_path'] = os.path.join(get_original_cwd(), dataset_kwargs['data_path'])
         kwargs['walnut_id'] = dataset_kwargs['walnut_id']
@@ -80,6 +86,20 @@ def get_standard_test_dataset(
                 dataset_kwargs['im_size'], dataset_kwargs['im_size']
                 )
             )
+        dataset = SimulatedDataset(
+                image_dataset, ray_trafo,
+                white_noise_rel_stddev=dataset_kwargs['noise_stddev'],
+                use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
+                device=device)
+    
+    elif dataset_kwargs['name'] == 'mayo':
+
+        image_dataset = MayoDataset(
+            data_path=dataset_kwargs['data_path'], sample_names=dataset_kwargs['sample_names'],
+            shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']), num_slice_per_patient=dataset_kwargs['num_slice_per_patient'], 
+            seed=use_fixed_seeds_starting_from
+        )
+
         dataset = SimulatedDataset(
                 image_dataset, ray_trafo,
                 white_noise_rel_stddev=dataset_kwargs['noise_stddev'],

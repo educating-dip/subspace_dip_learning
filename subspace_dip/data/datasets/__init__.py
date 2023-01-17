@@ -7,3 +7,4 @@ from .ellipses import EllipsesDataset, DiskDistributedEllipsesDataset, get_ellip
 from .walnut_patches import WalnutPatchesDataset
 from .cartoonset import CartoonSetDataset
 from .walnut import get_walnut_2d_observation, get_walnut_2d_ground_truth
+from .mayo import MayoDataset
