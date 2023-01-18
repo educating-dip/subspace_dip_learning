@@ -11,6 +11,9 @@ optim:
   loss_function: mse
   gamma: 1e-4
   optimizer: adam
+  use_early_stop: False
+  buffer_size: 100
+  patience: 1000
 show_pbar: True
 torch_manual_seed: 10
 log_path: ./

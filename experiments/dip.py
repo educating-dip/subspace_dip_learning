@@ -75,7 +75,11 @@ def coordinator(cfg : DictConfig) -> None:
                 'lr': cfg.dip.optim.lr,
                 'iterations': cfg.dip.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
-                'gamma': cfg.dip.optim.gamma}
+                'gamma': cfg.dip.optim.gamma,
+                'use_early_stop': cfg.dip.optim.use_early_stop,
+                'buffer_size': cfg.dip.optim.buffer_size,
+                'patience': cfg.dip.optim.patience
+                }
         
         if cfg.load_dip_models_from_path is not None: 
             reconstructor.load_pretrain_model(
