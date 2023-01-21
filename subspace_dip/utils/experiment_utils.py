@@ -15,7 +15,7 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     if dataset_kwargs['name'] in ('ellipses', 'rectangles', 'walnut_patches', 'cartoonset'):
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
-    elif dataset_kwargs['name'] in ('mayo', 'ellipses_mayo'): 
+    elif dataset_kwargs['name'] in ('mayo', 'ellipses_mayo', 'lodopab_mayo_cropped'): 
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
         kwargs['src_radius'] = ray_trafo_kwargs['src_radius']
@@ -92,11 +92,12 @@ def get_standard_test_dataset(
                 use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
                 device=device)
     
-    elif dataset_kwargs['name'] == 'mayo':
+    elif dataset_kwargs['name'] in ('mayo', 'mayo_cropped'):
 
         image_dataset = MayoDataset(
             data_path=dataset_kwargs['data_path'], sample_names=dataset_kwargs['sample_names'],
             shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']), num_slice_per_patient=dataset_kwargs['num_slice_per_patient'], 
+            crop=(dataset_kwargs['name'] == 'mayo_cropped'),
             seed=use_fixed_seeds_starting_from
         )
 

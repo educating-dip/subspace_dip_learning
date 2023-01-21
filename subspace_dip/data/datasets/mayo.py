@@ -39,11 +39,12 @@ def get_paths_and_dcm_files(sample_names: List[str], data_path: str = './', num_
 def mayo_to_tensor(
     path: str = './',
     shape: Tuple[int, int] = (512, 512),
+    crop: bool = False,
     seed: int = 1,
     ):
 
     transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Resize(shape)]
+            [transforms.ToTensor(), (transforms.CenterCrop(shape) if crop else transforms.Resize(shape))]
         )
     dcm_image = dcmread(path)
     image = dcm_image.pixel_array.astype('float32').T
@@ -74,11 +75,13 @@ class MayoDataset(torch.utils.data.IterableDataset):
         data_path: str = './',
         num_slice_per_patient: int = 20,
         shape: Tuple[int, int] = (512, 512),
+        crop: bool = False,
         seed: int = 1, 
         ):
 
         super().__init__()
         self.shape = shape
+        self.crop = crop
         paths_to_flat_dcm_files = get_paths_and_dcm_files(
                 sample_names=sample_names,
                 data_path=data_path,
@@ -100,6 +103,7 @@ class MayoDataset(torch.utils.data.IterableDataset):
             scan_slice = mayo_to_tensor(
                     path=path,
                     shape=self.shape,
+                    crop=self.crop,
                     seed=self.seed
                 )
             self.mayo_data.append(scan_slice)
