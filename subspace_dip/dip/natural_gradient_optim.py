@@ -234,7 +234,7 @@ def _single_tensor_ngd(
             descent_directions=descent_directions,
             natural_descent_directions=natural_descent_directions,
             use_adaptive_momentum=use_adaptive_momentum,
-            old_step=old_step, 
+            old_step=old_step,
             weight_decay=weight_decay,
             forward_op_as_part_of_model=curvature_kwargs['forward_op_as_part_of_model'],
             curvature_reduction_scale=curvature_reduction_scale, 
@@ -432,8 +432,6 @@ def _update_hyperparam_based_on_reduction_ratio(
         adaptation_decay: float = 0.75,
         lower_threshold: float = 0.25,
         upper_threshold: float = 0.75,
-        ratio_lower_threshold: float = 0.9, 
-        ratio_upper_threshold: float = 1.01, 
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 0.001, 
     ) -> Tuple[float,float]:

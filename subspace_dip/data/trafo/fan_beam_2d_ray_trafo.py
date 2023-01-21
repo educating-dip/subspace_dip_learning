@@ -21,16 +21,17 @@ def get_odl_ray_trafo_fan_beam_2d(
         src_radius: float, 
         det_radius: float,
         first_angle_zero: bool = True,
+        const: float = 1,
         impl: str = 'astra_cuda') -> odl.tomo.RayTransform:
-
+    
     space = odl.uniform_discr(
-            [-im_shape[0] / 2, -im_shape[1] / 2],
-            [im_shape[0] / 2, im_shape[1] / 2],
+            [-im_shape[0] / 2 * const, -im_shape[1] / 2 * const],
+            [im_shape[0] / 2 * const, im_shape[1] / 2 * const],
             im_shape,
             dtype='float32')
 
     default_odl_geometry = odl.tomo.cone_beam_geometry(
-            space, num_angles=num_angles, src_radius=src_radius, det_radius=det_radius)
+            space, num_angles=num_angles, src_radius=src_radius*const, det_radius=det_radius*const)
 
     if first_angle_zero:
         default_first_angle = (
@@ -76,6 +77,7 @@ class FanBeam2DRayTrafo(BaseRayTrafo):
                 src_radius=src_radius, 
                 det_radius=det_radius, 
                 first_angle_zero=first_angle_zero,
+                const=0.000164, # norm of 1 for 1000 angles, 0.1 for 100 angles 
                 impl=impl)
         odl_ray_trafo = odl.tomo.RayTransform(
                 odl_ray_trafo_full.domain,
@@ -87,7 +89,6 @@ class FanBeam2DRayTrafo(BaseRayTrafo):
 
         self.odl_ray_trafo = odl_ray_trafo
         self._angles = odl_ray_trafo.geometry.angles
-
         self.ray_trafo_module = OperatorModule(odl_ray_trafo)
         self.ray_trafo_module_adj = OperatorModule(odl_ray_trafo.adjoint)
         self.fbp_module = OperatorModule(odl_fbp)

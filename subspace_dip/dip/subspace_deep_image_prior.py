@@ -14,7 +14,7 @@ import tensorboardX
 from warnings import warn
 from torch import Tensor
 from torch.nn import MSELoss
-from torch.utils.data import DataLoader
+from copy import deepcopy
 from tqdm import tqdm
 from functools import partial
 
@@ -60,11 +60,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             slicing_sequence: Optional[Sequence] = None, 
         ) -> Tuple[Tensor]:
 
-        weights = self.pretrained_weights.clone()
-        if slicing_sequence is None: # θ = γ(c) = θ_p + \sum_i c_i * u_i
+        weights = self.pretrained_weights.clone() # dim_p
+        if slicing_sequence is None: # θ = γ(c) = θ_p + \sum_i c_i * u_i; u_i is num_params or len(self.subspace.indices) if self.subspace.is_trimmed
             sub_weights = torch.inner(
                     self.subspace.parameters_vec if parameters_vec is None \
-                        else parameters_vec, self.subspace.ortho_basis
+                        else parameters_vec, self.subspace.ortho_basis # parameters_vec: rank_subspace; self.subspace.ortho_basis: num_params * rank_subspace
                     )
         else:
             sub_weights = torch.inner(
@@ -208,7 +208,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         min_loss_state = {
             'loss': np.inf,
             'output': self.nn_model(self.net_input).detach(),  # pylint: disable=not-callable
-            'params_state_dict': self.subspace.state_dict(),
+            'params_state_dict': deepcopy(self.subspace.state_dict()),
         }
 
         if ground_truth is not None:
@@ -306,7 +306,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 if loss.item() < min_loss_state['loss']:
                     min_loss_state['loss'] = loss.item()
                     min_loss_state['output'] = output.detach()
-                    min_loss_state['params_state_dict'] = self.subspace.state_dict()
+                    min_loss_state['params_state_dict'] = deepcopy(self.subspace.state_dict())
 
                 for p in self.nn_model.parameters():
                     p.data.clamp_(-1000, 1000) # MIN,MAX

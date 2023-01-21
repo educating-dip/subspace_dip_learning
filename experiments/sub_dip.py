@@ -4,7 +4,6 @@ import torch
 from itertools import islice
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
-from subspace_dip.data import get_ellipses_dataset
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
 from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfo
