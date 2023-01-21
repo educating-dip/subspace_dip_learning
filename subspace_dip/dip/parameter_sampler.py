@@ -110,6 +110,7 @@ class ParameterSampler:
                 fold='train', 
                 im_size=dataset_kwargs['im_size'], 
                 length=dataset_kwargs['length']['train'], 
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=self.device
@@ -118,7 +119,8 @@ class ParameterSampler:
                 ray_trafo=ray_trafo, 
                 fold='validation', 
                 im_size=dataset_kwargs['im_size'],
-                length=dataset_kwargs['length']['validation'], 
+                length=dataset_kwargs['length']['validation'],
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=self.device

@@ -41,12 +41,11 @@ class LoDoPaBTorchDataset(torch.utils.data.IterableDataset):
         assert LoDoPaBDataset is not None, 'dival.datasets.lodopab.LoDoPaBDataset could not be imported, but is required by LoDoPaBDataset'
         self._setup_lodopab()
         for i in range(self.length):
-            yield self.lodopab.get_sample(i, part=self.fold, out=(False, True))[1]
+            yield torch.from_numpy(self.lodopab.get_sample(i, part=self.fold, out=(False, True))[1].asarray()).unsqueeze(dim=0)
 
     def __getitem__(self, idx: int) -> Tensor:
         self._setup_lodopab()
-        return self.lodopab.get_sample(idx, part=self.fold, out=(False, True))[1]
-
+        return torch.from_numpy(self.lodopab.get_sample(idx, part=self.fold, out=(False, True))[1].asarray()).unsqueeze(dim=0)
 
 def get_lodopab_dataset(
         ray_trafo: BaseRayTrafo,

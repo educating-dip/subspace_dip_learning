@@ -22,7 +22,8 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
             shape : Tuple[int, int] = (128,128), 
             length : int = 3200, 
             fixed_seed : int = 1, 
-            fold : str = 'train'
+            fold : str = 'train', 
+            max_n_ellipse : int = 70
         ):
 
         self.shape = shape
@@ -30,6 +31,7 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
         max_pt = [self.shape[0]/2, self.shape[1]/2]
         self.space = uniform_discr(min_pt, max_pt, self.shape)
         self.length = length
+        self.max_n_ellipse = max_n_ellipse
         self.ellipses_data = []
         self.setup_fold(
             fixed_seed=fixed_seed,
@@ -53,17 +55,16 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
         return self.length if self.length is not None else float('inf')
 
     def _extend_ellipses_data(self, min_length: int) -> None:
-        max_n_ellipse = 70
-        ellipsoids = np.empty((max_n_ellipse, 6))
+        ellipsoids = np.empty((self.max_n_ellipse, 6))
         n_to_generate = max(min_length - len(self.ellipses_data), 0)
         for _ in range(n_to_generate):
-            v = (self.rng.uniform(-0.4, 1.0, (max_n_ellipse,)))
-            a1 = .2 * self.rng.exponential(1., (max_n_ellipse,))
-            a2 = .2 * self.rng.exponential(1., (max_n_ellipse,))
-            x = self.rng.uniform(-0.9, 0.9, (max_n_ellipse,))
-            y = self.rng.uniform(-0.9, 0.9, (max_n_ellipse,))
-            rot = self.rng.uniform(0., 2 * np.pi, (max_n_ellipse,))
-            n_ellipse = min(self.rng.poisson(40), max_n_ellipse)
+            v = (self.rng.uniform(-0.4, 1.0, (self.max_n_ellipse,)))
+            a1 = .2 * self.rng.exponential(1., (self.max_n_ellipse,))
+            a2 = .2 * self.rng.exponential(1., (self.max_n_ellipse,))
+            x = self.rng.uniform(-0.9, 0.9, (self.max_n_ellipse,))
+            y = self.rng.uniform(-0.9, 0.9, (self.max_n_ellipse,))
+            rot = self.rng.uniform(0., 2 * np.pi, (self.max_n_ellipse,))
+            n_ellipse = min(self.rng.poisson(40), self.max_n_ellipse)
             v[n_ellipse:] = 0.
             ellipsoids = np.stack((v, a1, a2, x, y, rot), axis=1)
             self.ellipses_data.append(ellipsoids)
@@ -92,7 +93,8 @@ def get_ellipses_dataset(
         ray_trafo: BaseRayTrafo, 
         fold : str = 'train', 
         im_size : int = 128, 
-        length : int = 3200, 
+        length : int = 3200,
+        max_n_ellipse : int = 70, 
         white_noise_rel_stddev : float = .05, 
         use_fixed_seeds_starting_from : int = 1, 
         device = None) -> SimulatedDataset:
@@ -100,7 +102,8 @@ def get_ellipses_dataset(
     image_dataset = EllipsesDataset(
             (im_size, im_size), 
             length=length,
-            fold=fold, 
+            fold=fold,
+            max_n_ellipse=max_n_ellipse
             )
     
     return SimulatedDataset(

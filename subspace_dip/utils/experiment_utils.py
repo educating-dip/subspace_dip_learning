@@ -15,11 +15,12 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     if dataset_kwargs['name'] in ('ellipses', 'rectangles', 'walnut_patches', 'cartoonset'):
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
-    elif dataset_kwargs['name'] in ('mayo', 'ellipses_mayo', 'lodopab_mayo_cropped'): 
+    elif dataset_kwargs['name'] in ('mayo', 'ellipses_mayo', 'lodopab_mayo_cropped', 'mayo_cropped'): 
         kwargs['im_shape'] = (dataset_kwargs['im_size'], dataset_kwargs['im_size'])
         kwargs['num_angles'] = ray_trafo_kwargs['num_angles']
         kwargs['src_radius'] = ray_trafo_kwargs['src_radius']
         kwargs['det_radius'] = ray_trafo_kwargs['det_radius']
+        kwargs['use_norm_op'] = ray_trafo_kwargs['use_norm_op']
         # kwargs['load_mat_from_path'] = ray_trafo_kwargs['load_mat_from_path']
     elif dataset_kwargs['name'] in ('walnut', ):
         kwargs['data_path'] = os.path.join(get_original_cwd(), dataset_kwargs['data_path'])

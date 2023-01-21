@@ -86,9 +86,11 @@ def coordinator(cfg : DictConfig) -> None:
                 'train': cfg.source_dataset.length.train,
                 'validation': cfg.source_dataset.length.validation,
                 },
+            'max_n_ellipse': cfg.source_dataset.max_n_ellipse,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
             'use_fixed_seeds_starting_from': cfg.seed, 
-        } 
+        }
+
     elif cfg.source_dataset.name == 'disk_dist_ellipses':
         dataset_kwargs = {
             'name': cfg.source_dataset.name,
@@ -101,6 +103,13 @@ def coordinator(cfg : DictConfig) -> None:
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
             'use_fixed_seeds_starting_from': cfg.seed,
         }
+    elif cfg.source_dataset.name in ('lodopab_mayo_cropped', ): 
+        dataset_kwargs = {
+            'name': cfg.source_dataset.name,
+            'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_fixed_seeds_starting_from': cfg.seed, 
+        }
+    
     else: 
         raise  NotImplementedError
 

@@ -103,13 +103,17 @@ def coordinator(cfg : DictConfig) -> None:
         filtbackproj = filtbackproj.to(dtype=dtype, device=device)
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
+
+        use_norm_op = cfg.trafo.get('use_norm_op', False)
+        gamma = cfg.subspace.fine_tuning.optim.gamma if not use_norm_op else cfg.subspace.fine_tuning.optim.gamma * ray_trafo.norm_const **2
+
         optim_kwargs = { # optim_kwargs for adam and lbfgs
             'iterations': cfg.subspace.fine_tuning.iterations,
             'loss_function': cfg.subspace.fine_tuning.loss_function,
             'optim':{
                     'lr': cfg.subspace.fine_tuning.optim.lr,
                     'optimizer': cfg.subspace.fine_tuning.optim.optimizer,
-                    'gamma': cfg.subspace.fine_tuning.optim.gamma,
+                    'gamma': gamma,
                     'weight_decay': cfg.subspace.fine_tuning.optim.weight_decay,
                     'use_subsampling_orthospace': cfg.subspace.use_subsampling_orthospace,
                     'subsampling_orthospace_dim': cfg.subspace.subsampling_orthospace.subsampling_orthospace_dim

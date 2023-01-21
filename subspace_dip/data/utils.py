@@ -20,7 +20,7 @@ def get_ray_trafo(name, kwargs):
         ray_trafo = get_parallel_beam_2d_matmul_ray_trafo(
                 im_shape=kwargs['im_shape'], num_angles=kwargs['num_angles'],
                 angular_sub_sampling=kwargs['angular_sub_sampling'])
-    elif name in ('mayo', 'ellipses_mayo', 'lodopab_mayo_cropped'):
+    elif name in ('mayo', 'ellipses_mayo', 'lodopab_mayo_cropped', 'mayo_cropped'):
         # ray_trafo = get_fan_beam_2d_matmul_ray_trafo(
         #         im_shape=kwargs['im_shape'], num_angles=kwargs['num_angles'],
         #         angular_sub_sampling=kwargs['angular_sub_sampling'],
@@ -32,7 +32,8 @@ def get_ray_trafo(name, kwargs):
                 im_shape=kwargs['im_shape'], num_angles=kwargs['num_angles'],
                 angular_sub_sampling=kwargs['angular_sub_sampling'],
                 src_radius=kwargs['src_radius'], 
-                det_radius=kwargs['det_radius']
+                det_radius=kwargs['det_radius'], 
+                use_norm_op=kwargs['use_norm_op']
                 )
     elif name == 'walnut':
         ray_trafo = get_walnut_2d_ray_trafo(
