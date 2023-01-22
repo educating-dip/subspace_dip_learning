@@ -110,6 +110,11 @@ def coordinator(cfg : DictConfig) -> None:
         optim_kwargs = { # optim_kwargs for adam and lbfgs
             'iterations': cfg.subspace.fine_tuning.iterations,
             'loss_function': cfg.subspace.fine_tuning.loss_function,
+            'early_stop': {
+                'use_early_stop': cfg.dip.optim.use_early_stop,
+                'buffer_size': cfg.dip.optim.buffer_size,
+                'patience': cfg.dip.optim.patience
+                },
             'optim':{
                     'lr': cfg.subspace.fine_tuning.optim.lr,
                     'optimizer': cfg.subspace.fine_tuning.optim.optimizer,

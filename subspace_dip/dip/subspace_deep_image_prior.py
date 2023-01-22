@@ -25,6 +25,7 @@ from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfo
 from .natural_gradient_optim import NGD
 from .utils import stats_to_writer
+from .early_stopping_criteria import EarlyStop
 
 class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 
@@ -228,6 +229,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         print('Pre-trained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
+        if optim_kwargs['early_stop']['use_early_stop']: 
+            earlystop = EarlyStop(size=optim_kwargs['early_stop']['buffer_size'], patience=optim_kwargs['early_stop']['patience'])
+            min_loss_output_psnr_histories = []
         
         optim_step_stats = None 
         with tqdm(range(
@@ -322,11 +326,32 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     pbar.set_description(f'DIP output_psnr={output_psnr:.3f}', refresh=False)
                     writer.add_scalar('min_loss_output_psnr', min_loss_output_psnr, i)
                     writer.add_scalar('output_psnr', output_psnr, i)
+                    if optim_kwargs['early_stop']['use_early_stop']:
+                        min_loss_output_psnr_histories.append(min_loss_output_psnr)
 
                 writer.add_scalar('loss', loss.item(),  i)
                 if i % 10 == 0:
                     writer.add_image('reco', normalize(
                             min_loss_state['output'][0, ...]).cpu().numpy(), i)
+
+                if optim_kwargs['early_stop']['use_early_stop']:
+                    #variance history
+                    flat_out = output.detach().cpu().reshape(-1).numpy()
+                    earlystop.update_img_collection(flat_out)
+                    img_collection = earlystop.get_img_collection()
+                    if len(img_collection) == optim_kwargs['early_stop']['buffer_size']:
+                        ave_img = np.mean(img_collection, axis = 0)
+                        variance = np.mean ( np.mean((np.stack(img_collection) - ave_img) **2, axis=1 ), axis=0)
+                        writer.add_scalar('variance_early_stop', variance, i)
+                        if earlystop.stop == False:
+                            earlystop.stop = earlystop.check_stop(variance, i)
+                        else:
+                            print(f"Optimization would have early-stopped at {earlystop.best_epoch}")
+                            if ground_truth is not None:
+                                print(f" with a PSNR value of {min_loss_output_psnr_histories[earlystop.best_epoch]}")
+                            writer.add_scalar('early_stop_detected', earlystop.best_epoch, earlystop.best_epoch)
+                            writer.add_scalar('PSNR_at_early_stop', min_loss_output_psnr_histories[earlystop.best_epoch], earlystop.best_epoch)
+
 
         self.subspace.load_state_dict(
             min_loss_state['params_state_dict']

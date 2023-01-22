@@ -185,7 +185,6 @@ class DeepImagePrior(BaseDeepImagePrior):
                                 print(f" with a PSNR value of {min_loss_output_psnr_histories[earlystop.best_epoch]}")
                             writer.add_scalar('early_stop_detected', earlystop.best_epoch, earlystop.best_epoch)
                             writer.add_scalar('PSNR_at_early_stop', min_loss_output_psnr_histories[earlystop.best_epoch], earlystop.best_epoch)
-                            break
 
         self.nn_model.load_state_dict(min_loss_state['params_state_dict'])
         writer.close()
