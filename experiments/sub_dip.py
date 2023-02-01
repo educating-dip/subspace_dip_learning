@@ -128,20 +128,23 @@ def coordinator(cfg : DictConfig) -> None:
         if cfg.subspace.fine_tuning.optim.optimizer == 'ngd': 
             optim_kwargs['optim'].update(
                 { # optim_kwargs specific to ngd
-                    'momentum': cfg.subspace.fine_tuning.optim.momentum,
-                    'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                     'use_adaptive_damping': cfg.subspace.fine_tuning.optim.use_adaptive_damping,
                     'use_adaptive_learning_rate': cfg.subspace.fine_tuning.optim.use_adaptive_learning_rate,
                     'use_adaptive_momentum': cfg.subspace.fine_tuning.optim.use_adaptive_momentum,
-                    'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
-                    'scale_curvature': cfg.subspace.fine_tuning.optim.scale_curvature,
+                    'momentum': cfg.subspace.fine_tuning.optim.momentum,
+                    'init_scale_curvature': cfg.subspace.fine_tuning.optim.init_scale_curvature,
                     'use_approximate_quad_model': cfg.subspace.fine_tuning.optim.use_approximate_quad_model,
+                    'stats_interval': cfg.subspace.fine_tuning.optim.stats_interval,
+                    'return_stats': cfg.subspace.fisher_info.return_stats,
+                    # optim_kwargs specific to NGD hyperparams (max/min-lr, min-momentum, etc)
+                    'hyperparams_kwargs': OmegaConf.to_object(cfg.subspace.fine_tuning.hyperparams_kwargs),
+                    # optim_kwargs specific to FisherInfo update
+                    'num_random_vecs': cfg.subspace.fisher_info.num_random_vecs,
                     'mode': cfg.subspace.fisher_info.mode,
+                    'forward_op_as_part_of_model': cfg.subspace.forward_op_as_part_of_model,
                     'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
                     'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs),
-                    'forward_op_as_part_of_model': cfg.subspace.forward_op_as_part_of_model,
-                    'min_damping_value': cfg.subspace.fisher_info.min_damping_value,
-                    'return_stats': cfg.subspace.fisher_info.return_stats
+                    'adaptive_damping_kwargs': cfg.subspace.fisher_info.adaptive_damping_kwargs,
                 })
             fisher_info.reset_fisher_matrix()
 
@@ -159,6 +162,15 @@ def coordinator(cfg : DictConfig) -> None:
         print('Subspace DIP reconstruction of sample {:d}'.format(i))
         print('PSNR:', PSNR(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         print('SSIM:', SSIM(recon[0, 0].cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
+        
+        torch.save({
+                    'reconstruction': recon.cpu(), 
+                    'ground_truth': ground_truth.cpu(), 
+                    'filtbackproj':  filtbackproj.cpu(), 
+                    'observation': observation.cpu()
+                }, f'recon_info_{i}.pt'
+            )
+        torch.save(subspace.state_dict(), f'subspace_state_dict_{i}.pt')
 
 if __name__ == '__main__':
     coordinator()

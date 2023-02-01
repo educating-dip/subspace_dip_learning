@@ -64,7 +64,6 @@ def coordinator(cfg : DictConfig) -> None:
         use_random_init=cfg.subspace.use_random_init,
         num_random_projs=cfg.subspace.num_random_projs,
         use_approx=cfg.subspace.use_approx,
-        remove_first_n_samples=cfg.subspace.remove_first_n_samples,
         device=device
     )
     

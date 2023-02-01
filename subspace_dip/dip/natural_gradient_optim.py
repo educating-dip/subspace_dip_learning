@@ -57,15 +57,15 @@ class NGD(Optimizer):
             group.setdefault('differentiable', False)
 
     @_use_grad_for_differentiable
-    def step(self, 
+    def step(self,
+            closure,
             curvature: FisherInfo,
             curvature_kwargs: Dict,
+            hyperparams_kwargs: Dict, 
             use_adaptive_learning_rate: bool = False,
             use_adaptive_momentum: bool = False,
             use_adaptive_damping: bool = False,
             use_approximate_quad_model: bool = False,
-            adaptation_interval: int = 5,
-            closure=None,
             return_stats: bool = False
             ):
         
@@ -79,22 +79,22 @@ class NGD(Optimizer):
         params_with_grad = group['params'][0]
 
         step, loss, output, curvature_reduction_scale, stats = ngd(
+            closure=closure,
             params_with_grad=params_with_grad,
+            old_step=self.old_step,
             curvature=curvature,
             curvature_kwargs=curvature_kwargs,
-            lr=group['lr'],
-            momentum=group['momentum'],
-            weight_decay=group['weight_decay'],
-            stats_interval=group['stats_interval'],
-            curvature_reduction_scale=group['curvature_reduction_scale'],
+            hyperparams_kwargs=hyperparams_kwargs,
             use_adaptive_learning_rate=use_adaptive_learning_rate,
+            lr=group['lr'],
             use_adaptive_momentum=use_adaptive_momentum,
+            momentum=group['momentum'],
             use_adaptive_damping=use_adaptive_damping,
             use_approximate_quad_model=use_approximate_quad_model,
-            adaptation_interval=adaptation_interval,
-            old_step=self.old_step,
+            weight_decay=group['weight_decay'],
+            curvature_reduction_scale=group['curvature_reduction_scale'],
             step_cnt=self.step_cnt,
-            closure=closure,
+            stats_interval=group['stats_interval'],
             return_stats=return_stats
             )
         
@@ -104,90 +104,71 @@ class NGD(Optimizer):
 
         return loss, output, stats
 
-def ngd(params_with_grad: Tensor,
+def ngd(
+        closure, 
+        params_with_grad: Tensor,
         curvature: FisherInfo,
         curvature_kwargs: Dict,
+        hyperparams_kwargs: Dict, 
         old_step: Tensor,
-        closure=None,
-        lr: float = 0.1,
-        momentum: float = 0.,
-        weight_decay: float = 0.,
-        stats_interval: int = 20,
-        curvature_reduction_scale: float = 1., 
         use_adaptive_learning_rate: bool = False,
+        lr: float = 1,
         use_adaptive_momentum: bool = False,
+        momentum: float = 0.,
         use_adaptive_damping: bool = False,
-        use_approximate_quad_model: bool = False, 
-        min_hyperparam: float = 1e-8,
-        max_hyperparam: float = 100.,
-        adaptation_interval: int = 5, 
-        adaptation_decay: float = 0.75,
-        lower_threshold: float = 0.25,
-        upper_threshold: float = 0.75,
+        weight_decay: float = 0.,
+        curvature_reduction_scale: float = 1., 
+        use_approximate_quad_model: bool = False,
         step_cnt: int = 0, 
+        stats_interval: int = 20,
         return_stats: bool = False
         ):
 
     func = _single_tensor_ngd
 
     outs = func(
+        closure=closure,
         params_with_grad=params_with_grad,
         curvature=curvature,
         curvature_kwargs=curvature_kwargs,
+        hyperparams_kwargs=hyperparams_kwargs,
         old_step=old_step,
-        closure=closure,
-        lr=lr,
-        momentum=momentum,
-        weight_decay=weight_decay,
-        stats_interval=stats_interval,
-        curvature_reduction_scale=curvature_reduction_scale,
         use_adaptive_learning_rate=use_adaptive_learning_rate,
+        lr=lr,
         use_adaptive_momentum=use_adaptive_momentum,
+        momentum=momentum,
         use_adaptive_damping=use_adaptive_damping,
+        weight_decay=weight_decay,
+        curvature_reduction_scale=curvature_reduction_scale,
         use_approximate_quad_model=use_approximate_quad_model,
-        min_hyperparam=min_hyperparam, 
-        max_hyperparam=max_hyperparam,
-        adaptation_interval=adaptation_interval, 
-        adaptation_decay=adaptation_decay,
-        lower_threshold=lower_threshold,
-        upper_threshold=upper_threshold,
         step_cnt=step_cnt,
+        stats_interval=stats_interval,
         return_stats=return_stats
     )
 
     return outs
 
 def _single_tensor_ngd(
+        closure,
         params_with_grad: Tensor,
         curvature: FisherInfo,
         curvature_kwargs: Dict,
+        hyperparams_kwargs: Dict, 
         old_step: Tensor,
-        closure = None,
-        momentum: float = 0.,
-        lr: float = 0.1,
-        weight_decay: float = 0.,
-        stats_interval: int = 20,
-        curvature_reduction_scale: float = 1., 
         use_adaptive_learning_rate: bool = False,
+        lr: float = 1,
         use_adaptive_momentum: bool = False,
+        momentum: float = 0.,
+        weight_decay: float = 0.,
+        curvature_reduction_scale: float = 1., 
         use_adaptive_damping: bool = False,
         use_approximate_quad_model: bool = False, 
-        min_hyperparam: float = 1e-8,
-        max_hyperparam: float = 100.,
-        max_lr: float = 5e2, 
-        min_lr: float = - np.inf, 
-        max_momentum: float = 1., 
-        min_momentum: float = -np.inf, 
-        adaptation_interval: int = 5,
-        adaptation_decay: float = 0.75,
-        lower_threshold: float = 0.25,
-        upper_threshold: float = 0.75,
         step_cnt: int = 0,
+        stats_interval: int = 20,
         return_stats: bool = False
         ):
 
     # update curvature estimate
-
     curvature_matrix_update_kwargs =  {
         'num_random_vecs': curvature_kwargs['num_random_vecs'],
         'forward_op_as_part_of_model': curvature_kwargs['forward_op_as_part_of_model'],
@@ -216,7 +197,7 @@ def _single_tensor_ngd(
     # a.k.a. preconditioned gradients 
     natural_descent_directions = curvature.approx_fisher_vp(
         descent_directions,
-        include_damping=True, 
+        include_damping=True,
         include_Tikhonov_regularization=True,
         weight_decay=weight_decay,
         use_inverse=True # \tilde{F}^-1
@@ -240,8 +221,15 @@ def _single_tensor_ngd(
             curvature_reduction_scale=curvature_reduction_scale, 
             use_approximate_quad_model=use_approximate_quad_model
         )
-        lr = np.clip(lr, a_min=min_lr, a_max=max_lr)
-        momentum = np.clip(momentum, a_min=min_momentum, a_max=max_momentum)
+
+        lr = np.clip(lr, 
+            a_min=hyperparams_kwargs['min_lr_value'] if hyperparams_kwargs['min_lr_value'] is not None else -np.inf, 
+            a_max=hyperparams_kwargs['max_lr_value'] if hyperparams_kwargs['max_lr_value'] is not None else np.inf
+            )
+        momentum = np.clip(momentum, 
+            a_min=hyperparams_kwargs['momentum_min_value'] if hyperparams_kwargs['momentum_min_value'] is not None else -np.inf,
+            a_max=1.
+            )
     
     # compute delta and return velocities, old_step, a.k.a 𝛿 = -lr*F^-1 ∇h + μ*v
     step = -lr*natural_descent_directions + momentum * old_step
@@ -249,16 +237,16 @@ def _single_tensor_ngd(
 
     # Optionally compute the reduction ratio and update the damping
     pred_change, change_in_objective = None, None
-    if use_adaptive_damping and ((step_cnt + 1) % adaptation_interval == 0):
+    if use_adaptive_damping and ((step_cnt + 1) % hyperparams_kwargs['adaptation_interval'] == 0):
 
         damping_adaptive_kwargs = {
             'weight_decay': weight_decay,
-            'adaptation_interval': adaptation_interval,
-            'adaptation_decay': adaptation_decay,
-            'lower_threshold': lower_threshold,
-            'upper_threshold': upper_threshold,
-            'min_hyperparam': curvature_kwargs['min_damping_value'] if not None else min_hyperparam,
-            'max_hyperparam': max_hyperparam,
+            'adaptation_interval': hyperparams_kwargs['adaptation_interval'],
+            'adaptation_decay': curvature_kwargs['adaptive_damping_kwargs']['adaptation_decay'],
+            'lower_threshold': curvature_kwargs['adaptive_damping_kwargs']['lower_threshold'],
+            'upper_threshold': curvature_kwargs['adaptive_damping_kwargs']['upper_threshold'],
+            'min_hyperparam': curvature_kwargs['adaptive_damping_kwargs']['min_value'],
+            'max_hyperparam': curvature_kwargs['adaptive_damping_kwargs']['max_value'],
             'use_approximate_quad_model': use_approximate_quad_model
             }
         current_damping = curvature.curvature_damping.damping
@@ -273,17 +261,18 @@ def _single_tensor_ngd(
             forward_op_as_part_of_model=curvature_kwargs['forward_op_as_part_of_model'],
             **damping_adaptive_kwargs
         )
+        # note that the damping is an attribute of FisherInfo
         curvature.curvature_damping.damping = updated_damping
     
-    if (step_cnt + 1) % adaptation_interval == 0 and use_adaptive_learning_rate:
+    if (step_cnt + 1) %  hyperparams_kwargs['adaptation_interval'] == 0 and use_adaptive_learning_rate:
         
         curvature_reduction_adaptive_kwargs = {
             'weight_decay': weight_decay,
-            'adaptation_interval': adaptation_interval,
-            'adaptation_decay': adaptation_decay,
-            'lower_threshold': 0.95, # a more sentive threshold used here (w.r.t. damping)
-            'upper_threshold': 1.05,
-            'min_hyperparam': 1e-3,
+            'adaptation_interval': hyperparams_kwargs['adaptation_interval'],
+            'adaptation_decay': hyperparams_kwargs['curvature_reduction']['adaptation_decay'],
+            'lower_threshold': hyperparams_kwargs['curvature_reduction']['lower_threshold'], # a more sentive threshold used here (w.r.t. damping)
+            'upper_threshold': hyperparams_kwargs['curvature_reduction']['upper_threshold'], 
+            'min_hyperparam': hyperparams_kwargs['curvature_reduction']['min_value'],
             'max_hyperparam': 1.,
             'use_approximate_quad_model': use_approximate_quad_model
             }
@@ -307,7 +296,7 @@ def _single_tensor_ngd(
     if return_stats and (step_cnt + 1) % stats_interval == 0:
         stats = {
             'rho': rho.item() if 'rho' in locals() else 0.,
-            'model_change': pred_change if 'change' in locals() else 0.,
+            'model_change': pred_change if 'pred_change' in locals() else 0.,
             'curvature_damping': curvature.curvature_damping.damping,
             'lr': lr,
             'momentum': momentum if hasattr(momentum, 'item') else momentum,
@@ -439,7 +428,7 @@ def _update_hyperparam_based_on_reduction_ratio(
 
     # reduction ratio
     if pred_change is None and change_in_objective is None: 
-        pred_change, scaled_𝛿TF𝛿, tangent_plane = _compute_quadratic_model_value(
+        pred_change, _, _ = _compute_quadratic_model_value(
             curvature=curvature,
             # ∇h at this point params_with_grad have been updated but not the grads
             step=step, descent_directions=params_with_grad.grad,

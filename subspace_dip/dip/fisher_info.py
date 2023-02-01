@@ -4,9 +4,8 @@ import numpy as np
 import torch
 import numpy as np
 from functools import partial
-
 from torch import Tensor
-from functorch import vmap, jacrev, vjp, jvp, jacfwd
+from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
 
 class Damping:
@@ -326,7 +325,6 @@ class FisherInfo:
 
     def update(self,
         dataset: Optional[DataLoader] = None,
-        curvature_ema: float = 0.95,
         num_random_vecs: Optional[int] = 10,
         forward_op_as_part_of_model: bool = True,
         mode: str = 'full'
@@ -342,5 +340,5 @@ class FisherInfo:
             )
         else:
             raise NotImplementedError
-        matrix = curvature_ema * self.matrix + (1. - curvature_ema) * update
+        matrix = self.curvature_ema * self.matrix + (1. - self.curvature_ema) * update
         self.matrix = matrix

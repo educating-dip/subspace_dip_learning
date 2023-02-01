@@ -29,18 +29,6 @@ class BaseDeepImagePrior(ABC):
             torch_manual_seed: Union[int, None] = 1,
             device=None,
             net_kwargs=None):
-        """
-        ray_trafo : :class:`bayes_dip.data.BaseRayTrafo`
-            Ray transform.
-        torch_manual_seed : int or None, optional
-            Random number generator seed, used for initializing the network.
-            If `None`, no seed is set and the global random generator is advanced;
-            otherwise, the manual seed is set on a forked generator used for the initialization.
-            The default is `1`.
-        device : str or torch.device, optional
-            Device for the reconstruction.
-            If `None` (the default), `cuda:0` is chosen if available or `cpu` otherwise.
-        """
 
         self.device = device or torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
         self.ray_trafo = ray_trafo.to(self.device)
@@ -51,16 +39,6 @@ class BaseDeepImagePrior(ABC):
 
     def init_nn_model(self,
             torch_manual_seed: Union[int, None]):
-        """
-        Initialize the network :attr:`nn_model`.
-
-        Parameters
-        ----------
-        torch_manual_seed : int or None
-            Random number generator seed.
-            If `None`, no seed is set and the global random generator is advanced;
-            otherwise, the manual seed is set on a forked generator used for the initialization.
-        """
 
         with (torch.random.fork_rng([self.device]) if torch_manual_seed is not None
                 else nullcontext()):
@@ -79,15 +57,6 @@ class BaseDeepImagePrior(ABC):
 
     def load_pretrain_model(self,
             learned_params_path: str):
-        """
-        Load model state dict from file.
-
-        Parameters
-        ----------
-        learned_params_path : str
-            Path to the parameters, either absolute or relative to the original
-            current working directory.
-        """
 
         path = os.path.join(
             get_original_cwd(),

@@ -183,19 +183,20 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 weight_decay=optim_kwargs['optim']['weight_decay'], 
                 momentum=optim_kwargs['optim']['momentum'],
                 stats_interval=optim_kwargs['optim']['stats_interval'], 
-                curvature_reduction_scale=optim_kwargs['optim']['scale_curvature']
+                curvature_reduction_scale=optim_kwargs['optim']['init_scale_curvature']
                 )
             curvature_update_kwargs = {
                 'num_random_vecs': optim_kwargs['optim']['num_random_vecs'],
                 'forward_op_as_part_of_model': optim_kwargs['optim']['forward_op_as_part_of_model'],
                 'mode': optim_kwargs['optim']['mode'], 
-                'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema'], 
-                'min_damping_value': optim_kwargs['optim']['min_damping_value']
+                'update_curvature_ema': optim_kwargs['optim']['update_curvature_ema'],
+                'adaptive_damping_kwargs': optim_kwargs['optim']['adaptive_damping_kwargs'],
             }
             if optim_kwargs['optim']['update_curvature_ema']:
-          
                 curvature_update_kwargs.update(
                             {'curvature_ema_kwargs': optim_kwargs['optim']['curvature_ema_kwargs']})
+            ngd_hyperparams_kwargs = optim_kwargs['optim']['hyperparams_kwargs']
+
         else:
             raise NotImplementedError
 
@@ -265,9 +266,8 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 elif optim_kwargs['optim']['optimizer'] == 'lbfgs':
 
                     def closure():
-
                         self.optimizer.zero_grad()
-                        loss, output = self.objective(
+                        loss, _ = self.objective(
                         criterion=criterion,
                         noisy_observation=noisy_observation,
                         use_tv_loss=use_tv_loss,
@@ -276,7 +276,6 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         gamma=optim_kwargs['optim']['gamma']
                         )
                         loss.backward(retain_graph=True)
-
                         return loss
 
                     loss = self.optimizer.step(closure)
@@ -295,9 +294,10 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                     )
 
                     loss, output, optim_step_stats = self.optimizer.step(
+                        closure=partial_closure,
                         curvature=fisher_info,
                         curvature_kwargs=curvature_update_kwargs,
-                        closure=partial_closure, 
+                        hyperparams_kwargs=ngd_hyperparams_kwargs, 
                         use_adaptive_learning_rate=optim_kwargs['optim']['use_adaptive_learning_rate'],
                         use_adaptive_momentum=optim_kwargs['optim']['use_adaptive_momentum'],
                         use_adaptive_damping=optim_kwargs['optim']['use_adaptive_damping'],
@@ -346,9 +346,6 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                         if earlystop.stop == False:
                             earlystop.stop = earlystop.check_stop(variance, i)
                         else:
-                            print(f"Optimization would have early-stopped at {earlystop.best_epoch}")
-                            if ground_truth is not None:
-                                print(f" with a PSNR value of {min_loss_output_psnr_histories[earlystop.best_epoch]}")
                             writer.add_scalar('early_stop_detected', earlystop.best_epoch, earlystop.best_epoch)
                             writer.add_scalar('PSNR_at_early_stop', min_loss_output_psnr_histories[earlystop.best_epoch], earlystop.best_epoch)
 

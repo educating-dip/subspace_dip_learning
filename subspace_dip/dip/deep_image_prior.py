@@ -42,51 +42,6 @@ class DeepImagePrior(BaseDeepImagePrior):
             log_path: str = '.',
             show_pbar: bool = True,
             optim_kwargs=None) -> Tensor:
-        """
-        Reconstruct (by "training" the DIP network).
-
-        Parameters
-        ----------
-        noisy_observation : Tensor
-            Noisy observation. Shape: ``(1, 1, *self.ray_trafo.obs_shape)``.
-        filtbackproj : Tensor, optional
-            Filtered back-projection. Used as the network input if `recon_from_randn` is not `True`.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``
-        ground_truth : Tensor, optional
-            Ground truth. Used to print and log PSNR values.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``
-        recon_from_randn : bool, optional
-            If `True`, normal distributed noise with std-dev 0.1 is used as the network input;
-            if `False` (the default), `filtbackproj` is used as the network input.
-        use_tv_loss : bool, optional
-            Whether to include the TV loss term.
-            The default is `True`.
-        log_path : str, optional
-            Path for saving tensorboard logs. Each call to reconstruct creates a sub-folder
-            in `log_path`, starting with the time of the reconstruction call.
-            The default is `'.'`.
-        show_pbar : bool, optional
-            Whether to show a progress bar.
-            The default is `True`.
-        optim_kwargs : dict, optional
-            Keyword arguments for optimization.
-            The following arguments are supported:
-
-            * `gamma` (float)
-                Weighting factor of the TV loss term, the default is ``1e-4``.
-            * `lr` (float)
-                Learning rate, the default is ``1e-4``.
-            * `iterations` (int)
-                Number of iterations, the default is ``10000``.
-            * `loss_function` (str)
-                Discrepancy loss function, the default is ``'mse'``.
-
-        Returns
-        -------
-        best_output : Tensor
-            Model output with the minimum loss achieved during the training.
-            Shape: ``(1, 1, *self.ray_trafo.im_shape)``.
-        """
 
         writer = tensorboardX.SummaryWriter(
                 logdir=os.path.join(log_path, '_'.join((
@@ -180,9 +135,6 @@ class DeepImagePrior(BaseDeepImagePrior):
                         if earlystop.stop == False:
                             earlystop.stop = earlystop.check_stop(variance, i)
                         else:
-                            print(f"Optimization would have early-stopped at {earlystop.best_epoch}")
-                            if ground_truth is not None:
-                                print(f" with a PSNR value of {min_loss_output_psnr_histories[earlystop.best_epoch]}")
                             writer.add_scalar('early_stop_detected', earlystop.best_epoch, earlystop.best_epoch)
                             writer.add_scalar('PSNR_at_early_stop', min_loss_output_psnr_histories[earlystop.best_epoch], earlystop.best_epoch)
 
