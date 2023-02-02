@@ -1,9 +1,13 @@
-from typing import List, Tuple, Dict, Optional
+"""
+Provides :class:`NGD`.
+"""
+from typing import Tuple, Dict, Optional
+
 import torch
 import numpy as np
+
 from torch import Tensor
 from torch.optim import Optimizer
-from typing import List
 
 from .fisher_info import FisherInfo
 
@@ -330,7 +334,7 @@ def _compute_the_optimal_coefficients_via_quad_model(
 
     regulariser = curvature.curvature_damping.damping + weight_decay
     Δ = - natural_descent_directions
-    if not use_approximate_quad_model: 
+    if not use_approximate_quad_model:
         JcΔ = curvature.exact_fisher_vp(Δ, use_square_root=True, 
             forward_op_as_part_of_model=forward_op_as_part_of_model).flatten()  
     else: 
@@ -387,7 +391,7 @@ def _compute_quadratic_model_value(
         descent_directions: Tensor,
         step: Tensor,
         weight_decay: float,
-        forward_op_as_part_of_model: bool = True, 
+        forward_op_as_part_of_model: bool = True,
         use_approximate_quad_model: bool = False, 
         curvature_reduction_scale: float = 1.
     ) -> Tensor:

@@ -1,8 +1,10 @@
-import hydra
 from omegaconf import DictConfig, OmegaConf
+
 import torch
+import hydra
+
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo
-from subspace_dip.dip import DeepImagePrior, ParameterSampler, LinearSubspace
+from subspace_dip.dip import DeepImagePrior, ParameterSampler
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:

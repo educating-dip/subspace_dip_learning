@@ -1,17 +1,21 @@
 from itertools import islice
+
 import hydra
-from omegaconf import DictConfig, OmegaConf
 import torch
+
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
+
+from subspace_dip.dip import DeepImagePrior
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
 from subspace_dip.utils import PSNR, SSIM
-from subspace_dip.dip import DeepImagePrior
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
 
     dtype = torch.get_default_dtype()
-    device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
+    device = torch.device(
+        ('cuda:0' if torch.cuda.is_available() else 'cpu'))
     
     if cfg.test_dataset.name in ['walnut']:
         dataset_kwargs_trafo = {
@@ -45,7 +49,7 @@ def coordinator(cfg : DictConfig) -> None:
     reconstructor = DeepImagePrior(
         ray_trafo, 
         torch_manual_seed=cfg.dip.torch_manual_seed,
-        device=device, 
+        device=device,
         net_kwargs=net_kwargs
     )
 

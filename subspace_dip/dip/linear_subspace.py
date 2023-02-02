@@ -1,3 +1,6 @@
+"""
+Provides :class:`LinearSubspace`.
+"""
 from typing import Optional, List
 
 import os
@@ -6,13 +9,15 @@ import torch as Tensor
 import torch.nn as nn
 import tensorly as tl
 tl.set_backend('pytorch')
-from math import ceil 
-from .utils import gramschmidt
+
+from math import ceil
 from subspace_dip.utils import get_original_cwd
+from .utils import gramschmidt
 
 class LinearSubspace(nn.Module):
+
     def __init__(self, 
-        parameters_samples_list: Optional[List] = None, 
+        parameters_samples_list: Optional[List] = None,
         use_random_init: bool = True,
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
@@ -38,7 +43,6 @@ class LinearSubspace(nn.Module):
                 )
         else: 
             self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
-
             self.params_space_retain_ftc = params_space_retain_ftc
             self.is_trimmed = False
             if self.params_space_retain_ftc is not None:
@@ -50,14 +54,15 @@ class LinearSubspace(nn.Module):
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
     
-    def _trimming_params_in_subspace(self):
+    def _trimming_params_in_subspace(self, ) -> None:
 
         lev_score = self.ortho_basis.pow(2).sum(dim=1) # sum over subspace_dim
         num_params_to_be_retained = ceil(self.params_space_retain_ftc*self.ortho_basis.shape[0])
         _, indices = torch.topk(lev_score, k=num_params_to_be_retained)
+        
         # (num_params, subspace_dim) -> (num_params_to_be_retained, subspace_dim)
         self.ortho_basis = self.ortho_basis[indices, :] # this frees memory due to indices being array
-        torch.cuda.empty_cache()
+        torch.cuda.empty_cache() # this frees cashed GPU memory
         self.indices = indices.tolist()
 
     def init_parameters(self,
@@ -119,7 +124,7 @@ class LinearSubspace(nn.Module):
         subspace_dim = subspace_dim if subspace_dim is not None else len(self.parameters_samples_list)
         params_mat = torch.moveaxis(
             torch.stack(self.parameters_samples_list), (0, 1), (1, 0)
-            ) # (num_params, subspace_dim)
+            ) # (num_params, num_samples)
         params_mat = params_mat if not use_cpu else params_mat.cpu()
 
         if not use_approx:

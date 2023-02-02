@@ -1,8 +1,8 @@
 from typing import List
-import os
 from functools import reduce
+
+import os
 import numpy as np
-from skimage.metrics import structural_similarity
 import torch
 from torch import nn
 try:
@@ -10,6 +10,8 @@ try:
     HYDRA_AVAILABLE = True
 except ImportError:
     HYDRA_AVAILABLE = False
+
+from skimage.metrics import structural_similarity
 
 
 def get_original_cwd():

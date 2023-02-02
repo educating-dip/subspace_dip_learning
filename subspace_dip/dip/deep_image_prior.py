@@ -1,22 +1,26 @@
 """
 Provides :class:`DeepImagePrior`.
 """
-import os
-import socket
 from typing import Optional, Union
-import datetime
 from warnings import warn
 from copy import deepcopy
+
+import os
+import socket
+import datetime
 import torch
 import numpy as np
 import tensorboardX
+
 from torch import Tensor
 from torch.nn import MSELoss
 from tqdm import tqdm
-from subspace_dip.utils import tv_loss, PSNR, normalize
-from subspace_dip.data import BaseRayTrafo
+
 from .base_dip_image_prior import BaseDeepImagePrior
 from .early_stopping_criteria import EarlyStop
+from subspace_dip.utils import tv_loss, PSNR, normalize
+from subspace_dip.data import BaseRayTrafo
+
 
 class DeepImagePrior(BaseDeepImagePrior):
 

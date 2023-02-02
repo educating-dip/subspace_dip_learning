@@ -1,7 +1,5 @@
 import torch 
 import torch as Tensor
-import numpy as np
-from numpy.random import choice
 
 def gramschmidt(
         ortho_bases: Tensor, 

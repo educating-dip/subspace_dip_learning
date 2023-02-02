@@ -1,6 +1,8 @@
-import hydra
 from omegaconf import DictConfig, OmegaConf
+
 import torch
+import hydra
+
 from subspace_dip.utils.experiment_utils import get_standard_ray_trafo
 from subspace_dip.dip import DeepImagePrior, ParameterSampler, LinearSubspace
 
@@ -8,7 +10,8 @@ from subspace_dip.dip import DeepImagePrior, ParameterSampler, LinearSubspace
 def coordinator(cfg : DictConfig) -> None:
 
     dtype = torch.get_default_dtype()
-    device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
+    device = torch.device(
+        ('cuda:0' if torch.cuda.is_available() else 'cpu'))
     
     if cfg.test_dataset.name in ['walnut']:
         dataset_kwargs_trafo = {

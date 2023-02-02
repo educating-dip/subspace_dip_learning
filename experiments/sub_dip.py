@@ -1,12 +1,15 @@
+from itertools import islice
+from omegaconf import DictConfig, OmegaConf
+
 import hydra
 import torch
 
-from itertools import islice
-from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
-from subspace_dip.utils import PSNR, SSIM
+
 from subspace_dip.dip import DeepImagePrior, SubspaceDeepImagePrior, LinearSubspace, FisherInfo
+from subspace_dip.utils import PSNR, SSIM
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_test_dataset
+
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -78,7 +81,7 @@ def coordinator(cfg : DictConfig) -> None:
         fisher_info = FisherInfo(
             subspace_dip=reconstructor,
             init_damping=cfg.subspace.fisher_info.init_damping,
-            curvature_ema=cfg.subspace.fisher_info.static_curvature_ema,
+            init_curvature_ema=cfg.subspace.fisher_info.static_curvature_ema,
             sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode
         )
 
@@ -144,7 +147,7 @@ def coordinator(cfg : DictConfig) -> None:
                     'forward_op_as_part_of_model': cfg.subspace.forward_op_as_part_of_model,
                     'update_curvature_ema': cfg.subspace.fisher_info.update_curvature_ema,
                     'curvature_ema_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.curvature_ema_kwargs),
-                    'adaptive_damping_kwargs': cfg.subspace.fisher_info.adaptive_damping_kwargs,
+                    'adaptive_damping_kwargs': OmegaConf.to_object(cfg.subspace.fisher_info.adaptive_damping_kwargs),
                 })
             fisher_info.reset_fisher_matrix()
 

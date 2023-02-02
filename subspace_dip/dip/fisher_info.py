@@ -1,91 +1,17 @@
-from typing import Tuple, Optional
+"""
+Provides :class:`FisherInfo`.
+"""
+from typing import Tuple, Optional, Dict
+from functools import partial
 
-import numpy as np
 import torch
 import numpy as np
-from functools import partial
+
 from torch import Tensor
 from functorch import vmap, jacrev, vjp, jvp
 from torch.utils.data import DataLoader
 
-class Damping:
-
-    def __init__(self, init_damping: float = 1e2):
-        self._damping = init_damping
-    
-    @property
-    def damping(self, ): 
-        return self._damping
-
-    @damping.setter
-    def damping(self, value): 
-        self._damping = value 
-
-    def add_damping(self,  
-        matrix: Tensor,
-        include_Tikhonov_regularization: bool = True,
-        weight_decay: float = 0.
-        ) -> Tensor:
-
-        matrix[np.diag_indices(matrix.shape[0])] += self.damping
-        if include_Tikhonov_regularization: 
-            matrix[np.diag_indices(matrix.shape[0])] += weight_decay
-
-        return matrix
-
-class SamplingProbes:
-    def __init__(self, prxy_mat=None, mode='row_norm', device=None):
-
-        self.prxy_mat = prxy_mat
-        self.mode = mode
-        self.device = device
-        
-        if self.mode == 'row_norm':
-            assert self.prxy_mat is not None
-            assert  self.prxy_mat.ndim == 2
-
-            if not self.prxy_mat.is_sparse:
-                un_ps = torch.linalg.norm(self.prxy_mat, dim=1, ord=2).pow(2)
-            else:
-                un_ps = torch.sparse.sum(self.prxy_mat**2, dim=1).to_dense()            
-            const = un_ps.sum()
-            self.ps = un_ps/const
-
-        elif self.mode == 'gauss': 
-            pass
-        else: 
-            raise NotImplementedError
-
-    def sample_probes(self, num_random_vecs: int, shape: Tuple[int, int]) -> Tensor:
-
-        if self.mode == 'row_norm': 
-            func = self._scaled_unit_probes
-
-        elif self.mode == 'gauss':
-            def _gauss_probes(num_random_vecs, shape):
-                return torch.randn(
-                    (num_random_vecs, 1, 1, *shape), 
-                        device=self.device)
-            func = _gauss_probes
-        else:
-            raise NotImplementedError
-
-        return func(num_random_vecs=num_random_vecs, shape=shape)
-
-    def _scaled_unit_probes(self, num_random_vecs, shape):
-
-        new_shape = (num_random_vecs, 1, 1, np.prod(shape))
-        v = torch.zeros(*new_shape, device=self.device)
-        rand_inds = np.random.choice(
-                np.prod(shape), 
-                size=num_random_vecs, 
-                replace=True, 
-                p=self.ps.cpu().numpy()
-            )
-        ps_mask = self.ps.expand(num_random_vecs, -1).view(new_shape).pow(-.5)
-        v[range(num_random_vecs), :, :, rand_inds] = ps_mask[range(num_random_vecs), :, :, rand_inds]
-
-        return v.reshape(num_random_vecs, 1, 1, *shape)
+from .fisher_info_utils import Damping, SamplingProbes
 
 def _ema_polynomial_scheduler(
     step_cnt: int,
@@ -106,7 +32,7 @@ class FisherInfo:
     def __init__(self, 
         subspace_dip,
         init_damping: float = 1e-3,
-        curvature_ema: float = 0.95,
+        init_curvature_ema: float = 0.95,
         sampling_probes_mode: str = 'row_norm'
         ):
 
@@ -116,7 +42,7 @@ class FisherInfo:
         )
         self.init_matrix = None
         self.curvature_damping = Damping(init_damping=init_damping)
-        self._curvature_ema = curvature_ema
+        self._curvature_ema = init_curvature_ema
 
         if hasattr(self.subspace_dip.ray_trafo, 'matrix'): 
             prxy_mat = self.subspace_dip.ray_trafo.matrix 
@@ -143,7 +69,10 @@ class FisherInfo:
     def curvature_ema(self, value) -> None:
         self._curvature_ema = value
     
-    def update_curvature_ema(self, step_cnt: int, update_kwargs) -> None:
+    def update_curvature_ema(self, 
+        step_cnt: int, 
+        update_kwargs: Dict 
+        ) -> None:
         self.curvature_ema = _ema_polynomial_scheduler(step_cnt=step_cnt, **update_kwargs)
 
     def reset_fisher_matrix(self, ) -> None:
@@ -234,9 +163,11 @@ class FisherInfo:
                 perm_jac = self.subspace_dip.ray_trafo.trafo_flat(perm_jac)
                 jac = perm_jac.view(perm_jac.shape[0], jac.shape[0], jac.shape[2])
                 jac = torch.permute(jac, (1, 0, 2))
+
             return jac # (batch_size, nn_model_output, num_subspace_params)
         
         with torch.no_grad():
+
             per_inputs_jac_list = []
             if dataset is not None:
                 for _, _, fbp in dataset:
@@ -309,6 +240,7 @@ class FisherInfo:
             return matrix
 
         with torch.no_grad():
+
             per_inputs_fisher_list = []
             if dataset is not None: 
                 for _, _, fbp in dataset:

@@ -2,14 +2,15 @@
 Provides :class:`BaseDeepImagePrior`.
 """
 from typing import Union
-import os
 from abc import ABC, abstractmethod
 from contextlib import nullcontext
+
+import os
 import torch
+
+from .network import UNet
 from subspace_dip.utils import get_original_cwd
 from subspace_dip.data import BaseRayTrafo
-from .network import UNet
-
 
 class BaseDeepImagePrior(ABC):
     """
@@ -30,7 +31,9 @@ class BaseDeepImagePrior(ABC):
             device=None,
             net_kwargs=None):
 
-        self.device = device or torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
+        self.device = device or torch.device(
+                ('cuda:0' if torch.cuda.is_available() else 'cpu')
+            )
         self.ray_trafo = ray_trafo.to(self.device)
         self.net_kwargs = net_kwargs
         self.init_nn_model(torch_manual_seed)

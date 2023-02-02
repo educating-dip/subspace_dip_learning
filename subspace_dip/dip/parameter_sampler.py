@@ -1,7 +1,8 @@
 """
-Provides :class:`SubspaceConstructor`.
+Provides :class:`ParameterSampler`.
 """
 from typing import Dict, List
+
 import os
 import socket
 import datetime
