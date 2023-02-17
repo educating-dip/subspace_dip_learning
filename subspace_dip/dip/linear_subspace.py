@@ -1,7 +1,7 @@
 """
 Provides :class:`LinearSubspace`.
 """
-from typing import Optional, List
+from typing import Optional, List, Any
 
 import os
 import torch
@@ -24,7 +24,7 @@ class LinearSubspace(nn.Module):
         use_approx: bool = False,
         load_ortho_basis_path: Optional[str] = None,
         params_space_retain_ftc: Optional[float] = None,
-        device = None
+        device: Optional[Any] = None
         ) -> None:
 
         super().__init__()
@@ -105,7 +105,7 @@ class LinearSubspace(nn.Module):
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
         return_singular_values: Optional[bool] = True,
-        device = None,
+        device: Optional[Any] = None,
         use_cpu: bool = True, 
         use_approx: bool = False
         ) -> Tensor:

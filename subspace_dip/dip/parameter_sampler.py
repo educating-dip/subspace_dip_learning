@@ -1,7 +1,7 @@
 """
 Provides :class:`ParameterSampler`.
 """
-from typing import Dict, List
+from typing import Dict, List, Optional, Any
 
 import os
 import socket
@@ -31,7 +31,7 @@ class ParameterSampler:
         model: nn.Module,
         exclude_norm_layers: bool = False, 
         include_bias: bool = True, 
-        device = None, 
+        device: Optional[Any] = None, 
         ):
         
         self.model = model
@@ -389,7 +389,7 @@ class ParameterSampler:
 
     def load_sampled_paramters(self, 
         path_to_parameters_samples: str, 
-        device = None
+        device: Optional[Any] = None
         ):
         
         path = os.path.join(get_original_cwd(), 

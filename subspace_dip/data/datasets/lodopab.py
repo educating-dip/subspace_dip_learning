@@ -1,7 +1,7 @@
 """
 Provides the LoDoPaBTorchDataset.
 """
-from typing import Iterator
+from typing import Iterator, Optional, Any
 import numpy as np
 import torch 
 from torch import Tensor
@@ -52,7 +52,7 @@ def get_lodopab_dataset(
         fold : str = 'train',
         white_noise_rel_stddev : float = .05,
         use_fixed_seeds_starting_from : int = 1, 
-        device = None) -> SimulatedDataset:
+        device: Optional[Any] = None) -> SimulatedDataset:
 
     image_dataset = LoDoPaBTorchDataset(
             fold=fold, 

@@ -1,7 +1,7 @@
 """
 Provides :class:`BaseDeepImagePrior`.
 """
-from typing import Union
+from typing import Union, Optional, Any
 from abc import ABC, abstractmethod
 from contextlib import nullcontext
 
@@ -28,7 +28,7 @@ class BaseDeepImagePrior(ABC):
     def __init__(self,
             ray_trafo: BaseRayTrafo,
             torch_manual_seed: Union[int, None] = 1,
-            device=None,
+            device: Optional[Any] = None,
             net_kwargs=None):
 
         self.device = device or torch.device(

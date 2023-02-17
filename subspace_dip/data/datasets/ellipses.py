@@ -1,7 +1,7 @@
 """
 Provides the EllipsesDataset.
 """
-from typing import Union, Iterator, Tuple 
+from typing import Union, Iterator, Tuple, Optional, Any
 import numpy as np
 import torch 
 from torch import Tensor
@@ -97,7 +97,7 @@ def get_ellipses_dataset(
         max_n_ellipse : int = 70, 
         white_noise_rel_stddev : float = .05, 
         use_fixed_seeds_starting_from : int = 1, 
-        device = None) -> SimulatedDataset:
+        device : Optional[Any] = None) -> SimulatedDataset:
 
     image_dataset = EllipsesDataset(
             (im_size, im_size), 
@@ -151,7 +151,7 @@ def get_disk_dist_ellipses_dataset(
         diameter : float =  0.4745,
         white_noise_rel_stddev : float = .05, 
         use_fixed_seeds_starting_from : int = 1, 
-        device = None) -> SimulatedDataset:
+        device: Optional[Any] = None) -> SimulatedDataset:
 
     image_dataset = DiskDistributedEllipsesDataset(
             (im_size, im_size), 
