@@ -3,12 +3,13 @@ Code re-adapted from
 https://github.com/rb876/deep_image_prior_extension/blob/4e8e118718f51e4eeb0bb7be093959fecd80a561/src/dataset/pascal_voc.py
 Provides the PascalVOCDataset.
 """
-from typing import Optional
+from typing import Optional, Any
 import numpy as np
 import torch
 from odl import uniform_discr
 
 from ..simulation import SimulatedDataset
+from ..trafo import BaseRayTrafo
 from torchvision.datasets import VOCSegmentation
 from torchvision.transforms import Grayscale, RandomCrop, PILToTensor, Lambda, Compose
 
@@ -21,7 +22,7 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
             data_path: str, 
             year: str = '2012', 
             shuffle: bool = True,
-            fold: = 'train', 
+            fold: str = 'train', 
             im_size: int = 128,
             fixed_seeds: bool = True
         ):

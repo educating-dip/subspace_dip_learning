@@ -5,6 +5,8 @@ import numpy as np
 
 from torch.utils.data import Dataset, TensorDataset
 from subspace_dip.data import get_ray_trafo, SimulatedDataset
+from subspace_dip.data.trafo.identity_trafo import IdentityTrafo
+from subspace_dip.data.trafo.blurring_trafo import BlurringTrafo
 from subspace_dip.data import (
         RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, 
         CartoonSetDataset, MayoDataset, get_walnut_2d_observation, get_walnut_2d_ground_truth
@@ -33,6 +35,17 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     else:
         raise ValueError
     return get_ray_trafo(dataset_kwargs['name'], kwargs=kwargs)
+
+def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict):
+    if natural_trafo_kwargs['natural_trafo_type'] == 'identity':
+        trafo = IdentityTrafo(im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']))
+    elif natural_trafo_kwargs['natural_trafo_type'] == 'blurring':
+        trafo = BlurringTrafo(im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']),
+                flt_size=natural_trafo_kwargs['flt_size'], std=natural_trafo_kwargs['std'],
+                P_eps=natural_trafo_kwargs['P_eps'])
+    else:
+        raise ValueError()
+    return trafo
 
 def get_standard_test_dataset(
         ray_trafo,
