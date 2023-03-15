@@ -19,12 +19,12 @@ def coordinator(cfg : DictConfig) -> None:
             'im_size': cfg.source_dataset.im_size, 
             'data_path': cfg.test_dataset.data_path,
             'walnut_id': cfg.test_dataset.walnut_id
-            }
+        }
     else:
         dataset_kwargs_trafo = {
             'name': cfg.source_dataset.name,
             'im_size': cfg.source_dataset.im_size 
-            }
+        }
 
     ray_trafo = get_standard_ray_trafo(
         ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
@@ -33,13 +33,13 @@ def coordinator(cfg : DictConfig) -> None:
     ray_trafo.to(dtype=dtype, device=device)
 
     net_kwargs = {
-            'scales': cfg.dip.net.scales,
-            'channels': cfg.dip.net.channels,
-            'skip_channels': cfg.dip.net.skip_channels,
-            'use_norm': cfg.dip.net.use_norm,
-            'use_sigmoid': cfg.dip.net.use_sigmoid,
-            'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
-        }
+        'scales': cfg.dip.net.scales,
+        'channels': cfg.dip.net.channels,
+        'skip_channels': cfg.dip.net.skip_channels,
+        'use_norm': cfg.dip.net.use_norm,
+        'use_sigmoid': cfg.dip.net.use_sigmoid,
+        'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
+    }
 
     base_reconstructor = DeepImagePrior(
         ray_trafo, 
@@ -53,8 +53,8 @@ def coordinator(cfg : DictConfig) -> None:
             learned_params_path=cfg.load_dip_models_from_path)
             
     sampler = ParameterSampler(
-            model=base_reconstructor.nn_model,
-            device=device
+        model=base_reconstructor.nn_model,
+        device=device
         )
 
     optim_kwargs = {
@@ -109,9 +109,16 @@ def coordinator(cfg : DictConfig) -> None:
         dataset_kwargs = {
             'name': cfg.source_dataset.name,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
-            'use_fixed_seeds_starting_from': cfg.seed, 
+            'use_fixed_seeds_starting_from': cfg.seed 
         }
-    
+    elif cfg.source_dataset.name in ('pascal_voc'):
+        dataset_kwargs = {
+            'name': cfg.source_dataset.name,
+            'data_path': cfg.source_dataset.data_path,
+            'im_size': cfg.source_dataset.im_size,
+            'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_fixed_seeds_starting_from': cfg.seed 
+        }
     else: 
         raise  NotImplementedError
 

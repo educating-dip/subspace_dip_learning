@@ -1,0 +1,3 @@
+name: pascal_voc
+im_size: 128
+noise_stddev: 0.05

@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
 from subspace_dip.utils import PSNR, normalize, get_original_cwd
-from subspace_dip.data import get_ellipses_dataset, get_disk_dist_ellipses_dataset, get_lodopab_dataset
+from subspace_dip.data import get_ellipses_dataset, get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_pascal_voc_dataset
 from subspace_dip.utils import get_params_from_nn_module
 from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
 
@@ -166,7 +166,27 @@ class ParameterSampler:
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=self.device
             )
+        elif dataset_kwargs['name'] == 'pascal_voc':
 
+            dataset_train = get_pascal_voc_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='train',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=self.device
+            )
+
+            dataset_validation = get_pascal_voc_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='validation',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=self.device
+            )
         else: 
             raise NotImplementedError
 
