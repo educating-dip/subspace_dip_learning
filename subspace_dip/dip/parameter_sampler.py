@@ -177,7 +177,6 @@ class ParameterSampler:
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=self.device
             )
-
             dataset_validation = get_pascal_voc_dataset(
                 ray_trafo=ray_trafo,
                 data_path=dataset_kwargs['data_path'],
@@ -302,8 +301,6 @@ class ParameterSampler:
                         optim_kwargs['save_best_learned_params_path'] is not None) and optim_kwargs['save_best_learned_params_per_epoch']):
                         self.save_learned_params(optim_kwargs['save_best_learned_params_path'], comment=f'epoch_{epoch}_')
         
-
-
                     if phase == 'validation':
                         self.writer.add_scalar('val_loss', epoch_loss, num_grad_updates)
                         self.writer.add_scalar('val_psnr', epoch_psnr, num_grad_updates)
@@ -355,12 +352,6 @@ class ParameterSampler:
                 self.optimizer,
                 T_max=optim_kwargs['epochs'],
                 eta_min=optim_kwargs['scheduler']['lr_min'])
-        elif optim_kwargs['scheduler']['name'].lower() == 'onecyclelr':
-            self._scheduler = OneCycleLR(
-                self.optimizer,
-                steps_per_epoch=ceil( optim_kwargs['scheduler']['train_len']['train'] /  optim_kwargs['batch_size']),
-                max_lr= optim_kwargs['scheduler']['max_lr'],
-                epochs= optim_kwargs['epochs'])
         else:
             raise KeyError
 

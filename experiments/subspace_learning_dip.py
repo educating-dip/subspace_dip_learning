@@ -79,7 +79,6 @@ def coordinator(cfg : DictConfig) -> None:
         },
         'scheduler': {
             'name': cfg.sampler.training.optim.scheduler_name,
-            'train_len': cfg.source_dataset.length,
             'lr_min': cfg.sampler.training.optim.lr_min,
             'max_lr': cfg.sampler.training.optim.max_lr
         }

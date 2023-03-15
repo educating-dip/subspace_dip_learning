@@ -1,3 +1,4 @@
 name: pascal_voc
 im_size: 128
+data_path: ./
 noise_stddev: 0.05
