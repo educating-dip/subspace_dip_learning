@@ -80,7 +80,7 @@ class BlurringTrafo(BaseRayTrafo):
         h_np = np.array(h.clone().cpu())[0, 0, :, :]
         H = fft_np(h_np, s=im_shape)
         H = zero_SV(H, P_eps)
-        H_ = torch.tensor(H).float().unsqueeze(0).unsqueeze(0)
+        H_ = torch.tensor(H).real.float().unsqueeze(0).unsqueeze(0)
         self.register_buffer('H_', H_, persistent=False)
 
         self.pinv_fun = pinv_fun
@@ -88,7 +88,7 @@ class BlurringTrafo(BaseRayTrafo):
             Ht = H  # blurring is self-adjoint
             HtH_dag = dagger(torch.from_numpy(Ht * H)).numpy()
             HtH_dag_Ht_np = HtH_dag * Ht
-            HtH_dag_Ht = torch.tensor(HtH_dag_Ht_np).float().cuda()
+            HtH_dag_Ht = torch.tensor(HtH_dag_Ht_np).real.float().cuda()
             self.register_buffer('HtH_dag_Ht', HtH_dag_Ht, persistent=False)
 
     def trafo(self, x: Tensor) -> Tensor:

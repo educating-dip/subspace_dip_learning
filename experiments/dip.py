@@ -49,7 +49,8 @@ def coordinator(cfg : DictConfig) -> None:
         'skip_channels': cfg.dip.net.skip_channels,
         'use_norm': cfg.dip.net.use_norm,
         'use_sigmoid': cfg.dip.net.use_sigmoid,
-        'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh
+        'sigmoid_saturation_thresh': cfg.dip.net.sigmoid_saturation_thresh,
+        'num_image_channels': cfg.dip.net.num_image_channels
     }
 
     reconstructor = DeepImagePrior(

@@ -5,6 +5,7 @@ net:
   use_norm: True
   use_sigmoid: False
   sigmoid_saturation_thresh: 15
+  num_image_channels: 1
 optim:
   lr: 1e-4
   iterations: 10000

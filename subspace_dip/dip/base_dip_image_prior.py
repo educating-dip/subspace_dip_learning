@@ -49,8 +49,8 @@ class BaseDeepImagePrior(ABC):
                 torch.random.manual_seed(torch_manual_seed)
 
             self.nn_model = UNet(
-                in_ch=1,
-                out_ch=1,
+                in_ch=self.net_kwargs['num_image_channels'],
+                out_ch=self.net_kwargs['num_image_channels'],
                 channels=self.net_kwargs['channels'][:self.net_kwargs['scales']],
                 skip_channels=self.net_kwargs['skip_channels'][:self.net_kwargs['scales']],
                 use_sigmoid=self.net_kwargs['use_sigmoid'],

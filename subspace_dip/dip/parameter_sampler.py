@@ -306,7 +306,17 @@ class ParameterSampler:
                         self.writer.add_scalar('val_psnr', epoch_psnr, num_grad_updates)
                         self.writer.add_image('reco', normalize(
                             outputs[0, ].detach().cpu().numpy()
-                            ), 
+                            ),
+                            num_grad_updates
+                        )
+                        self.writer.add_image('ground_truth', normalize(
+                            gt[0, ].detach().cpu().numpy()
+                            ),
+                            num_grad_updates
+                        )
+                        self.writer.add_image('fbp', normalize(
+                            fbp[0, ].detach().cpu().numpy()
+                            ),
                             num_grad_updates
                         )
 
