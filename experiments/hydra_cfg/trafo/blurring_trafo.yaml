@@ -1,0 +1,4 @@
+natural_trafo_type: blurring
+flt_size: 15
+std: 1.6
+P_eps: 5e-2

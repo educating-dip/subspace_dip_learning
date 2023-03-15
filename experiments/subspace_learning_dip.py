@@ -3,7 +3,7 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import hydra
 
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_natural_trafo
 from subspace_dip.dip import DeepImagePrior, ParameterSampler
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
@@ -26,10 +26,15 @@ def coordinator(cfg : DictConfig) -> None:
             'im_size': cfg.source_dataset.im_size 
         }
 
-    ray_trafo = get_standard_ray_trafo(
-        ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo), 
-        dataset_kwargs=dataset_kwargs_trafo
-    )
+    if cfg.trafo.get('natural_trafo_type', None) is None:
+        ray_trafo = get_standard_ray_trafo(
+            ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo),
+            dataset_kwargs=dataset_kwargs_trafo,
+        )
+    else:
+        ray_trafo = get_standard_natural_trafo(
+            OmegaConf.to_object(cfg.trafo),
+            dataset_kwargs=dataset_kwargs_trafo)
     ray_trafo.to(dtype=dtype, device=device)
 
     net_kwargs = {
