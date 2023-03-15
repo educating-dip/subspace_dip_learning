@@ -25,7 +25,8 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
             shuffle: bool = True,
             fold: str = 'train', 
             im_size: int = 128,
-            fixed_seeds: bool = True
+            fixed_seeds: bool = True,
+            num_images: int = -1,
         ):
 
         self.shape = (im_size, im_size)
@@ -50,7 +51,7 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
                 # download=True
             )
         
-        self.length = len(self.dataset.images)
+        self.length = len(self.dataset.images) if num_images == -1 else num_images
         self.shuffle = shuffle
         self.fixed_seed = {'train': 1, 'validation': 2}[fold]
         self.rng = np.random.RandomState(
@@ -88,12 +89,14 @@ def get_pascal_voc_dataset(
         fold : str = 'train',
         white_noise_rel_stddev : float = .05, 
         use_fixed_seeds_starting_from : int = 1, 
+        num_images : int = -1,
         device : Optional[Any] = None) -> SimulatedDataset:
 
     image_dataset = PascalVOCDataset(
             data_path=data_path, 
             im_size = im_size,
             fold=fold, 
+            num_images=num_images,
             )
     
     return SimulatedDataset(

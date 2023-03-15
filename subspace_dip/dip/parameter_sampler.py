@@ -183,7 +183,8 @@ class ParameterSampler:
                 im_size=dataset_kwargs['im_size'],
                 fold='validation',
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'],
+                num_images=32,
                 device=self.device
             )
         else: 
@@ -270,8 +271,8 @@ class ParameterSampler:
                                     self._scheduler.step()
 
                         for i in range(outputs.shape[0]):
-                            gt_ = gt[i, 0].detach().cpu().numpy()
-                            outputs_ = outputs[i, 0].detach().cpu().numpy()
+                            gt_ = gt[i, :].detach().cpu().numpy()
+                            outputs_ = outputs[i, :].detach().cpu().numpy()
                             running_psnr += PSNR(outputs_, gt_, data_range=1)
 
                         # statistics

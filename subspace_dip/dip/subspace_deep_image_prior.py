@@ -230,7 +230,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         
         print('Pre-trained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input)[0, :].detach().cpu().numpy(), ground_truth[0, :].cpu().numpy()))
-        if (self.net_input.shape[1] == 1:
+        if self.net_input.shape[1] == 1:
             print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
         if optim_kwargs['early_stop']['use_early_stop']: 
             earlystop = EarlyStop(size=optim_kwargs['early_stop']['buffer_size'], patience=optim_kwargs['early_stop']['patience'])
