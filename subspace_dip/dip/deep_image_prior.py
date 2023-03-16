@@ -62,7 +62,7 @@ class DeepImagePrior(BaseDeepImagePrior):
         self.nn_model.train()
 
         self.net_input = (
-            0.1 * torch.randn(1, 1, *self.ray_trafo.im_shape, device=self.device)
+            0.1 * torch.randn(1, filtbackproj.shape[1], *self.ray_trafo.im_shape, device=self.device)
             if recon_from_randn else
             filtbackproj.to(self.device))
 

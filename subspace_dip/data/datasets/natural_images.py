@@ -26,7 +26,7 @@ def RGB_natural_images_to_tensor(image_path: str = './',
             transforms.Resize(shape)]
         )
     return transform(
-        ImageOps.invert(Image.open(image_path).convert('RGB'))
+        Image.open(image_path).convert('RGB')
         ).numpy()
 
 class NaturalImagesMiniDataset(torch.utils.data.IterableDataset):
