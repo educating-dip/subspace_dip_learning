@@ -33,7 +33,8 @@ class FisherInfo:
         subspace_dip,
         init_damping: float = 1e-3,
         init_curvature_ema: float = 0.95,
-        sampling_probes_mode: str = 'row_norm'
+        sampling_probes_mode: str = 'row_norm', 
+        num_image_channels: int = 1
         ):
 
         self.subspace_dip = subspace_dip
@@ -55,6 +56,7 @@ class FisherInfo:
                 mode=sampling_probes_mode, 
                 device=self.subspace_dip.device
             )
+        self.num_image_channels = num_image_channels 
     
     @property
     def shape(self, ) -> Tuple[int,int]:
@@ -213,10 +215,10 @@ class FisherInfo:
             
             obs_shape = self.subspace_dip.ray_trafo.obs_shape
             im_shape = self.subspace_dip.ray_trafo.im_shape
-
             v = self.probes.sample_probes(
                 num_random_vecs=num_random_vecs, 
-                shape=self.subspace_dip.ray_trafo.obs_shape
+                shape=self.subspace_dip.ray_trafo.obs_shape, 
+                num_channels=self.num_image_channels
                 )
 
             if not forward_op_as_part_of_model: 

@@ -17,7 +17,7 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    assert cfg.test_dataset.im_size == cfg.source_dataset.im_size
+    # assert cfg.test_dataset.im_size == cfg.source_dataset.im_size
 
     if cfg.test_dataset.name in ['walnut']:
         dataset_kwargs_trafo = {
@@ -88,7 +88,8 @@ def coordinator(cfg : DictConfig) -> None:
             subspace_dip=reconstructor,
             init_damping=cfg.subspace.fisher_info.init_damping,
             init_curvature_ema=cfg.subspace.fisher_info.static_curvature_ema,
-            sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode
+            sampling_probes_mode=cfg.subspace.fisher_info.sampling_probes_mode, 
+            num_image_channels=cfg.dip.net.num_image_channels
         )
 
     dataset = get_standard_test_dataset(

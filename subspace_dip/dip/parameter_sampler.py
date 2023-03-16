@@ -299,7 +299,7 @@ class ParameterSampler:
                     epoch_psnr = running_psnr / dataset_sizes[phase]
 
                     if (phase == 'train' and (optim_kwargs['save_best_learned_params_path'] is not None) 
-                            and optim_kwargs['save_best_learned_params_per_epoch'] and (epoch%10==0) ):            
+                            and optim_kwargs['save_best_learned_params_per_epoch'] and (epoch%100==0) ):            
                         self.save_learned_params(
                                 optim_kwargs['save_best_learned_params_path'], 
                                 comment=f'epoch_{epoch}_'

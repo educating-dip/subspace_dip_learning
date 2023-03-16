@@ -56,7 +56,7 @@ class SamplingProbes:
         else: 
             raise NotImplementedError
 
-    def sample_probes(self, num_random_vecs: int, shape: Tuple[int, int]) -> Tensor:
+    def sample_probes(self, num_random_vecs: int, shape: Tuple[int, int], num_channels: int = 1) -> Tensor:
 
         if self.mode == 'row_norm': 
             func = self._scaled_unit_probes
@@ -64,7 +64,7 @@ class SamplingProbes:
         elif self.mode == 'gauss':
             def _gauss_probes(num_random_vecs, shape):
                 return torch.randn(
-                    (num_random_vecs, 1, 1, *shape), 
+                    (num_random_vecs, 1, num_channels, *shape), 
                         device=self.device)
             func = _gauss_probes
         else:
