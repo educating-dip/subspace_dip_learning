@@ -55,6 +55,7 @@ class BaseDeepImagePrior(ABC):
                 skip_channels=self.net_kwargs['skip_channels'][:self.net_kwargs['scales']],
                 use_sigmoid=self.net_kwargs['use_sigmoid'],
                 use_norm=self.net_kwargs['use_norm'],
+                norm_type=self.net_kwargs['norm_type'],
                 sigmoid_saturation_thresh= self.net_kwargs['sigmoid_saturation_thresh']
                 ).to(self.device)
 

@@ -16,6 +16,7 @@ class UNet(nn.Module):
             skip_channels: Sequence[int],
             use_sigmoid: bool = True,
             use_norm: bool = True,
+            norm_type: str = 'group',
             sigmoid_saturation_thresh: float = 9.):
         """
         Parameters
@@ -36,6 +37,8 @@ class UNet(nn.Module):
         use_norm : bool, optional
             Whether to include group norm layers after each convolutional layer.
             The default is `True`.
+        norm_type : {``'group'``, ``'batch'``}, optional
+            Norm layer type, the default is ``'group'``.
         sigmoid_saturation_thresh : float, optional
             Threshold for clamping pre-sigmoid activations
             if `saturation_safety` (is `True` by default) in :meth:`forward`.
@@ -46,18 +49,18 @@ class UNet(nn.Module):
         self.scales = len(channels)
         self.use_sigmoid = use_sigmoid
         self.sigmoid_saturation_thresh = sigmoid_saturation_thresh
-        self.inc = InBlock(in_ch, channels[0], use_norm=use_norm)
+        self.inc = InBlock(in_ch, channels[0], use_norm=use_norm, norm_type=norm_type)
         self.down = nn.ModuleList()
         self.up = nn.ModuleList()
         for i in range(1, self.scales):
             self.down.append(DownBlock(in_ch=channels[i - 1],
                                        out_ch=channels[i],
-                                       use_norm=use_norm))
+                                       use_norm=use_norm, norm_type=norm_type))
         for i in range(1, self.scales):
             self.up.append(UpBlock(in_ch=channels[-i],
                                    out_ch=channels[-i - 1],
                                    skip_ch=skip_channels[-i],
-                                   use_norm=use_norm))
+                                   use_norm=use_norm, norm_type=norm_type))
         self.outc = OutBlock(in_ch=channels[0],
                              out_ch=out_ch)
 
@@ -117,7 +120,8 @@ class DownBlock(nn.Module):
             out_ch: int,
             kernel_size: int = 3,
             num_groups: int = 4,
-            use_norm: bool = True):
+            use_norm: bool = True,
+            norm_type: str = 'group'):
         """
         Parameters
         ----------
@@ -132,6 +136,8 @@ class DownBlock(nn.Module):
         use_norm : bool, optional
             Whether to include group norm layers after each convolutional layer.
             The default is `True`.
+        norm_type : {``'group'``, ``'batch'``}, optional
+            Norm layer type, the default is ``'group'``.
         """
         super().__init__()
         to_pad = int((kernel_size - 1) / 2)
@@ -139,11 +145,11 @@ class DownBlock(nn.Module):
             self.conv = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernel_size,
                           stride=2, padding=to_pad),
-                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups),
+                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups) if norm_type == 'group' else nn.BatchNorm2d(num_features=out_ch),
                 nn.LeakyReLU(0.2),
                 nn.Conv2d(out_ch, out_ch, kernel_size,
                           stride=1, padding=to_pad),
-                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups),
+                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups) if norm_type == 'group' else nn.BatchNorm2d(num_features=out_ch),
                 nn.LeakyReLU(0.2))
         else:
             self.conv = nn.Sequential(
@@ -177,7 +183,8 @@ class InBlock(nn.Module):
             out_ch: int,
             kernel_size: int = 3,
             num_groups: int = 2,
-            use_norm: bool = True):
+            use_norm: bool = True,
+            norm_type: str = 'group'):
         """
         Parameters
         ----------
@@ -192,6 +199,8 @@ class InBlock(nn.Module):
         use_norm : bool, optional
             Whether to include a group norm layer after the convolutional layer.
             The default is `True`.
+        norm_type : {``'group'``, ``'batch'``}, optional
+            Norm layer type, the default is ``'group'``.
         """
         super().__init__()
         to_pad = int((kernel_size - 1) / 2)
@@ -199,7 +208,7 @@ class InBlock(nn.Module):
             self.conv = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernel_size,
                           stride=1, padding=to_pad),
-                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups),
+                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups) if norm_type == 'group' else nn.BatchNorm2d(num_features=out_ch),
                 nn.LeakyReLU(0.2))
         else:
             self.conv = nn.Sequential(
@@ -231,7 +240,8 @@ class UpBlock(nn.Module):
             skip_ch: int = 4,
             kernel_size: int = 3,
             num_groups: int = 2,
-            use_norm: bool = True):
+            use_norm: bool = True,
+            norm_type: str = 'group'):
         """
         Parameters
         ----------
@@ -256,14 +266,14 @@ class UpBlock(nn.Module):
             skip_ch = 1
         if use_norm:
             self.conv = nn.Sequential(
-                nn.GroupNorm(num_channels=in_ch + skip_ch, num_groups=1),
+                nn.GroupNorm(num_channels=in_ch + skip_ch, num_groups=1) if norm_type == 'group' else nn.BatchNorm2d(num_features=in_ch + skip_ch),
                 nn.Conv2d(in_ch + skip_ch, out_ch, kernel_size, stride=1,
                           padding=to_pad),
-                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups),
+                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups) if norm_type == 'group' else nn.BatchNorm2d(num_features=out_ch),
                 nn.LeakyReLU(0.2),
                 nn.Conv2d(out_ch, out_ch, kernel_size,
                           stride=1, padding=to_pad),
-                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups),
+                nn.GroupNorm(num_channels=out_ch, num_groups=num_groups) if norm_type == 'group' else nn.BatchNorm2d(num_features=out_ch),
                 nn.LeakyReLU(0.2))
         else:
             self.conv = nn.Sequential(
@@ -277,7 +287,7 @@ class UpBlock(nn.Module):
         if use_norm:
             self.skip_conv = nn.Sequential(
                 nn.Conv2d(out_ch, skip_ch, kernel_size=1, stride=1),
-                nn.GroupNorm(num_channels=skip_ch, num_groups=1),
+                nn.GroupNorm(num_channels=skip_ch, num_groups=1) if norm_type == 'group' else nn.BatchNorm2d(num_features=skip_ch),
                 nn.LeakyReLU(0.2))
         else:
             self.skip_conv = nn.Sequential(
