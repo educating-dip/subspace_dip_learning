@@ -4,7 +4,8 @@ Provides data generation, data access, and the ray transform.
 
 from .datasets import (
         RectanglesDataset, EllipsesDataset, DiskDistributedEllipsesDataset, LoDoPaBTorchDataset, WalnutPatchesDataset, CartoonSetDataset, MayoDataset,
-        get_ellipses_dataset, get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_walnut_2d_observation, get_walnut_2d_ground_truth, get_pascal_voc_dataset)
+        get_ellipses_dataset, get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_walnut_2d_observation, get_walnut_2d_ground_truth, get_pascal_voc_dataset, 
+        NaturalImagesMiniDataset)
 from .trafo import (
         BaseRayTrafo, MatmulRayTrafo,
         get_odl_ray_trafo_parallel_beam_2d, ParallelBeam2DRayTrafo,

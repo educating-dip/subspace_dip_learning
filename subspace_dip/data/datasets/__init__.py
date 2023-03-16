@@ -10,3 +10,4 @@ from .cartoonset import CartoonSetDataset
 from .walnut import get_walnut_2d_observation, get_walnut_2d_ground_truth
 from .mayo import MayoDataset
 from .pascal_voc import PascalVOCDataset, get_pascal_voc_dataset
+from .natural_images import NaturalImagesMiniDataset

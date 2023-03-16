@@ -9,7 +9,8 @@ from subspace_dip.data.trafo.identity_trafo import IdentityTrafo
 from subspace_dip.data.trafo.blurring_trafo import BlurringTrafo
 from subspace_dip.data import (
         RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, 
-        CartoonSetDataset, MayoDataset, get_walnut_2d_observation, get_walnut_2d_ground_truth
+        CartoonSetDataset, MayoDataset, get_walnut_2d_observation, 
+        get_walnut_2d_ground_truth, NaturalImagesMiniDataset
     )
 from .utils import get_original_cwd
 
@@ -139,6 +140,21 @@ def get_standard_test_dataset(
                 noisy_observation[None].to(device=device))[0].to(device=device)
         dataset = TensorDataset(  # include batch dims
                 noisy_observation[None], ground_truth[None], filtbackproj[None])
+
+    elif dataset_kwargs['name'] == 'natural_images':
+
+        image_dataset = NaturalImagesMiniDataset(
+            data_path=dataset_kwargs['data_path_test'], shape=(
+                dataset_kwargs['im_size'], dataset_kwargs['im_size']
+                )
+            )
+        dataset = SimulatedDataset(
+                image_dataset, ray_trafo,
+                white_noise_rel_stddev=dataset_kwargs['noise_stddev'],
+                use_fixed_seeds_starting_from=use_fixed_seeds_starting_from,
+                device=device
+            )
+
     else:
         raise ValueError
 
