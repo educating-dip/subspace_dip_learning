@@ -191,7 +191,7 @@ class ParameterSampler:
                         for i in range(outputs.shape[0]):
                             gt_ = gt[i, :].detach().cpu().numpy()
                             outputs_ = outputs[i, :].detach().cpu().numpy()
-                            running_psnr += PSNR(outputs_, gt_, data_range=1)
+                            running_psnr += PSNR(outputs_, gt_)
 
                         # statistics
                         running_loss += loss.item() * outputs.shape[0]
