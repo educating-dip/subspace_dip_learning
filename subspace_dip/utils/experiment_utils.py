@@ -10,7 +10,7 @@ from subspace_dip.data import (
         SimulatedDataset, BaseRayTrafo, IdentityTrafo, BlurringTrafo, MultiBlurringTrafoIter, NaturalImagesMiniDataset,
         RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, CartoonSetDataset, MayoDataset, 
         get_ray_trafo, get_walnut_2d_observation, get_walnut_2d_ground_truth, get_ellipses_dataset, 
-        get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_pascal_voc_dataset
+        get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_pascal_voc_dataset, get_image_net_dataset
     )
 
 def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):

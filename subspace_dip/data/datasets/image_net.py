@@ -15,10 +15,7 @@ from torchvision.datasets import ImageNet
 from torchvision.transforms import RandomCrop, PILToTensor, Lambda, Compose
 
 class ImageNetDataset(torch.utils.data.IterableDataset):
-    """
-    Dataset with randomly cropped patches from Pascal VOC2012
-    (http://host.robots.ox.ac.uk/pascal/VOC/voc2012/index.html)
-    """
+
     def __init__(self,
             data_path: str, 
             year: str = '2012', 
@@ -47,7 +44,6 @@ class ImageNetDataset(torch.utils.data.IterableDataset):
         self.dataset = ImageNet(
                 root=data_path, 
                 split=partition[fold], 
-                download=True
             )
         
         self.length = len(self.dataset.images) if num_images == -1 else num_images
