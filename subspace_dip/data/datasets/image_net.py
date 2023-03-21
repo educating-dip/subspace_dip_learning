@@ -11,10 +11,10 @@ from torch import Tensor
 
 from ..simulation import SimulatedDataset
 from ..trafo import BaseRayTrafo
-from torchvision.datasets import VOCSegmentation
+from torchvision.datasets import ImageNet
 from torchvision.transforms import RandomCrop, PILToTensor, Lambda, Compose
 
-class PascalVOCDataset(torch.utils.data.IterableDataset):
+class ImageNetDataset(torch.utils.data.IterableDataset):
     """
     Dataset with randomly cropped patches from Pascal VOC2012
     (http://host.robots.ox.ac.uk/pascal/VOC/voc2012/index.html)
@@ -24,7 +24,7 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
             year: str = '2012', 
             shuffle: bool = True,
             fold: str = 'train', 
-            im_size: int = 128,
+            im_size: int = 256,
             fixed_seeds: bool = True,
             num_images: int = -1,
         ):
@@ -44,11 +44,10 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
             'train' : 'train', 
             'validation': 'val'
         }
-        self.dataset = VOCSegmentation(
+        self.dataset = ImageNet(
                 root=data_path, 
-                year=year, 
-                image_set=partition[fold], 
-                # download=True
+                split=partition[fold], 
+                download=True
             )
         
         self.length = len(self.dataset.images) if num_images == -1 else num_images
@@ -82,22 +81,23 @@ class PascalVOCDataset(torch.utils.data.IterableDataset):
             idx = self.rng.randint(self.length)
         return self._generate_item(idx)
 
-def get_pascal_voc_dataset(
+def get_image_net_dataset(
         ray_trafo: BaseRayTrafo, 
         data_path : str, 
-        im_size : int = 128,
+        im_size : int = 256,
         fold : str = 'train',
-        white_noise_rel_stddev : float = .05,
-        use_multi_stddev_white_noise : bool = False,
-        use_fixed_seeds_starting_from : int = 1, 
+        white_noise_rel_stddev : float = .05, 
+        use_multi_stddev_white_noise : bool = False, 
+        use_fixed_seeds_starting_from : int = 1,
         num_images : int = -1,
-        device : Optional[Any] = None) -> SimulatedDataset:
+        device : Optional[Any] = None
+        ) -> SimulatedDataset:
 
-    image_dataset = PascalVOCDataset(
-            data_path=data_path, 
+    image_dataset = ImageNetDataset(
+            data_path = data_path, 
             im_size = im_size,
-            fold=fold, 
-            num_images=num_images,
+            fold = fold, 
+            num_images = num_images,
             )
     
     return SimulatedDataset(

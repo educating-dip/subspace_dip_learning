@@ -19,14 +19,15 @@ from copy import deepcopy
 from tqdm import tqdm
 from functools import partial
 
-from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
-from subspace_dip.data import BaseRayTrafo
 from .base_dip_image_prior import BaseDeepImagePrior
 from .linear_subspace import LinearSubspace
 from .fisher_info import FisherInfo
 from .natural_gradient_optim import NGD
 from .utils import stats_to_writer
 from .early_stopping_criteria import EarlyStop
+
+from subspace_dip.utils import tv_loss, PSNR, SSIM, normalize
+from subspace_dip.data import BaseRayTrafo
 
 class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
 

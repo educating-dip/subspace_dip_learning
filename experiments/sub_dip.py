@@ -55,11 +55,11 @@ def coordinator(cfg : DictConfig) -> None:
         }
 
     base_reconstructor = DeepImagePrior(
-                ray_trafo, 
-                torch_manual_seed=cfg.dip.torch_manual_seed,
-                device=device, 
-                net_kwargs=net_kwargs
-            )
+            ray_trafo, 
+            torch_manual_seed=cfg.dip.torch_manual_seed,
+            device=device, 
+            net_kwargs=net_kwargs
+        )
     
     base_reconstructor.load_pretrain_model(
         learned_params_path=cfg.load_dip_models_from_path)

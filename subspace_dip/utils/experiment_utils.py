@@ -1,18 +1,17 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 
 import os
 import numpy as np
 
 from torch.utils.data import Dataset, TensorDataset
-from subspace_dip.data import get_ray_trafo, SimulatedDataset
-from subspace_dip.data.trafo.identity_trafo import IdentityTrafo
-from subspace_dip.data.trafo.blurring_trafo import BlurringTrafo
-from subspace_dip.data import (
-        RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, 
-        CartoonSetDataset, MayoDataset, get_walnut_2d_observation, 
-        get_walnut_2d_ground_truth, NaturalImagesMiniDataset
-    )
 from .utils import get_original_cwd
+
+from subspace_dip.data import (
+        SimulatedDataset, BaseRayTrafo, IdentityTrafo, BlurringTrafo, MultiBlurringTrafoIter, NaturalImagesMiniDataset,
+        RectanglesDataset, EllipsesDataset, WalnutPatchesDataset, CartoonSetDataset, MayoDataset, 
+        get_ray_trafo, get_walnut_2d_observation, get_walnut_2d_ground_truth, get_ellipses_dataset, 
+        get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_pascal_voc_dataset
+    )
 
 def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
     kwargs = {}
@@ -37,23 +36,38 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
         raise ValueError
     return get_ray_trafo(dataset_kwargs['name'], kwargs=kwargs)
 
-def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict):
+def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict, dtype: Optional[Any] = None, device: Optional[Any] = None):
     if natural_trafo_kwargs['natural_trafo_type'] == 'identity':
-        trafo = IdentityTrafo(im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']))
+        trafo = IdentityTrafo(
+                im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size'])
+            )
     elif natural_trafo_kwargs['natural_trafo_type'] == 'blurring':
-        trafo = BlurringTrafo(im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']),
-                flt_size=natural_trafo_kwargs['flt_size'], std=natural_trafo_kwargs['std'],
-                P_eps=natural_trafo_kwargs['P_eps'])
+        trafo = BlurringTrafo(
+                im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']),
+                flt_size=natural_trafo_kwargs['flt_size'],
+                std=natural_trafo_kwargs['std'],
+                P_eps=natural_trafo_kwargs['P_eps']
+            )
+    elif natural_trafo_kwargs['natural_trafo_type'] == 'multi_blurring':
+        # can only be used to learn a subpsace
+        trafo = MultiBlurringTrafoIter(
+                im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']),
+                flt_size=natural_trafo_kwargs['flt_size'],
+                rstddev=natural_trafo_kwargs['rstddev'],
+                P_eps=natural_trafo_kwargs['P_eps'],
+                device=device,
+                dtype=dtype
+            )
     else:
         raise ValueError()
     return trafo
 
 def get_standard_test_dataset(
-        ray_trafo,
-        dataset_kwargs,
-        trafo_kwargs, 
-        use_fixed_seeds_starting_from=1, 
-        device=None
+        ray_trafo: BaseRayTrafo,
+        dataset_kwargs: Dict,
+        trafo_kwargs: Dict, 
+        use_fixed_seeds_starting_from: int = 1, 
+        device: Optional[Any] = None
     ) -> Dataset:
 
     if dataset_kwargs['name'] == 'ellipses':
@@ -159,6 +173,128 @@ def get_standard_test_dataset(
         raise ValueError
 
     return dataset
+
+def get_standard_training_dataset(
+        ray_trafo: BaseRayTrafo, 
+        dataset_kwargs: Dict, 
+        device: Optional[Any] = None
+        ):
+    
+        if dataset_kwargs['name'] in ('ellipses', 'ellipses_mayo'):
+
+            dataset_train = get_ellipses_dataset(
+                ray_trafo=ray_trafo, 
+                fold='train', 
+                im_size=dataset_kwargs['im_size'], 
+                length=dataset_kwargs['length']['train'], 
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+            dataset_validation = get_ellipses_dataset(
+                ray_trafo=ray_trafo, 
+                fold='validation', 
+                im_size=dataset_kwargs['im_size'],
+                length=dataset_kwargs['length']['validation'],
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+        
+        elif dataset_kwargs['name'] == 'disk_dist_ellipses':
+
+            dataset_train = get_disk_dist_ellipses_dataset(
+                ray_trafo=ray_trafo, 
+                fold='train', 
+                im_size=dataset_kwargs['im_size'], 
+                length=dataset_kwargs['length']['train'],
+                diameter=dataset_kwargs['diameter'],
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+            dataset_validation = get_disk_dist_ellipses_dataset(
+                ray_trafo=ray_trafo, 
+                fold='validation', 
+                im_size=dataset_kwargs['im_size'],
+                diameter=dataset_kwargs['diameter'],
+                length=dataset_kwargs['length']['validation'], 
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+
+        elif dataset_kwargs['name'] == 'lodopab_mayo_cropped':
+
+            dataset_train = get_lodopab_dataset(
+                ray_trafo=ray_trafo, 
+                fold='train', 
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+            dataset_validation = get_lodopab_dataset(
+                ray_trafo=ray_trafo, 
+                fold='validation', 
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+
+        elif dataset_kwargs['name'] == 'pascal_voc':
+
+            dataset_train = get_pascal_voc_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='train',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'],
+                use_multi_stddev_white_noise=dataset_kwargs['use_multi_stddev_white_noise'],
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+            dataset_validation = get_pascal_voc_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='validation',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'],
+                use_multi_stddev_white_noise=dataset_kwargs['use_multi_stddev_white_noise'],
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'],
+                num_images=1024, # hardcoded validation length
+                device=device
+            )
+        
+        elif dataset_kwargs['name'] == 'image_net':
+
+            dataset_train = get_image_net_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='train',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
+                use_multi_stddev_white_noise=dataset_kwargs['use_multi_stddev_white_noise'],
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                device=device
+            )
+            dataset_validation = get_image_net_dataset(
+                ray_trafo=ray_trafo,
+                data_path=dataset_kwargs['data_path'],
+                im_size=dataset_kwargs['im_size'],
+                fold='validation',
+                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'],
+                use_multi_stddev_white_noise=dataset_kwargs['use_multi_stddev_white_noise'],
+                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'],
+                num_images=1024, # hardcoded validation set length 
+                device=device
+            )
+
+        else: 
+            raise NotImplementedError
+    
+        return dataset_train, dataset_validation
 
 def find_log_files(log_dir: str) -> str:
     log_files = []

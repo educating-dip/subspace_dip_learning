@@ -18,10 +18,9 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
-from subspace_dip.utils import PSNR, normalize, get_original_cwd
-from subspace_dip.data import get_ellipses_dataset, get_disk_dist_ellipses_dataset, get_lodopab_dataset, get_pascal_voc_dataset
-from subspace_dip.utils import get_params_from_nn_module
 from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
+from subspace_dip.utils import (PSNR, normalize, get_original_cwd,
+    get_params_from_nn_module, get_standard_training_dataset)
 
 class ParameterSampler:
     """
@@ -47,7 +46,8 @@ class ParameterSampler:
         parameter_vec = get_params_from_nn_module(
                 self.model,
                 exclude_norm_layers=self.exclude_norm_layers,
-                include_bias=self.include_bias)
+                include_bias=self.include_bias
+            )
         self.parameters_samples.append(
             parameter_vec if not use_cpu else parameter_vec.cpu()
         )
@@ -103,93 +103,11 @@ class ParameterSampler:
         criterion = torch.nn.MSELoss()
         self.init_optimizer(optim_kwargs=optim_kwargs)
 
-
-        if dataset_kwargs['name'] in ('ellipses', 'ellipses_mayo'):
-
-            dataset_train = get_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='train', 
-                im_size=dataset_kwargs['im_size'], 
-                length=dataset_kwargs['length']['train'], 
-                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
+        dataset_train, dataset_validation = get_standard_training_dataset(
+            ray_trafo=ray_trafo, 
+            dataset_kwargs=dataset_kwargs, 
+            device=self.device
             )
-            dataset_validation = get_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='validation', 
-                im_size=dataset_kwargs['im_size'],
-                length=dataset_kwargs['length']['validation'],
-                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-        
-        elif dataset_kwargs['name'] == 'disk_dist_ellipses':
-
-            dataset_train = get_disk_dist_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='train', 
-                im_size=dataset_kwargs['im_size'], 
-                length=dataset_kwargs['length']['train'],
-                diameter=dataset_kwargs['diameter'],
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-            dataset_validation = get_disk_dist_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='validation', 
-                im_size=dataset_kwargs['im_size'],
-                diameter=dataset_kwargs['diameter'],
-                length=dataset_kwargs['length']['validation'], 
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-
-        elif dataset_kwargs['name'] == 'lodopab_mayo_cropped':
-
-            dataset_train = get_lodopab_dataset(
-                ray_trafo=ray_trafo, 
-                fold='train', 
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-            dataset_validation = get_lodopab_dataset(
-                ray_trafo=ray_trafo, 
-                fold='validation', 
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-        elif dataset_kwargs['name'] == 'pascal_voc':
-
-            dataset_train = get_pascal_voc_dataset(
-                ray_trafo=ray_trafo,
-                data_path=dataset_kwargs['data_path'],
-                im_size=dataset_kwargs['im_size'],
-                fold='train',
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
-                device=self.device
-            )
-            dataset_validation = get_pascal_voc_dataset(
-                ray_trafo=ray_trafo,
-                data_path=dataset_kwargs['data_path'],
-                im_size=dataset_kwargs['im_size'],
-                fold='validation',
-                white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
-                use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'],
-                num_images=32,
-                device=self.device
-            )
-        else: 
-            raise NotImplementedError
-
         # create PyTorch dataloaders
         data_loaders = {
             'train': DataLoader(

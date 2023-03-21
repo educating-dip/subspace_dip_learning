@@ -3,8 +3,10 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import hydra
 
-from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_natural_trafo
+from subspace_dip.data import MultiBlurringTrafoIter
 from subspace_dip.dip import DeepImagePrior, ParameterSampler
+from subspace_dip.utils.experiment_utils import get_standard_ray_trafo, get_standard_natural_trafo
+
 
 @hydra.main(config_path='hydra_cfg', config_name='config')
 def coordinator(cfg : DictConfig) -> None:
@@ -12,7 +14,8 @@ def coordinator(cfg : DictConfig) -> None:
     dtype = torch.get_default_dtype()
     device = torch.device(('cuda:0' if torch.cuda.is_available() else 'cpu'))
     
-    assert cfg.source_dataset.im_size == cfg.test_dataset.im_size
+    # assert cfg.source_dataset.im_size == cfg.test_dataset.im_size
+
     if cfg.test_dataset.name in ['walnut']:
         dataset_kwargs_trafo = {
             'name': cfg.test_dataset.name,
@@ -30,12 +33,19 @@ def coordinator(cfg : DictConfig) -> None:
         ray_trafo = get_standard_ray_trafo(
             ray_trafo_kwargs=OmegaConf.to_object(cfg.trafo),
             dataset_kwargs=dataset_kwargs_trafo,
+            dtype=dtype,
+            device=device,
         )
     else:
         ray_trafo = get_standard_natural_trafo(
             OmegaConf.to_object(cfg.trafo),
-            dataset_kwargs=dataset_kwargs_trafo)
-    ray_trafo.to(dtype=dtype, device=device)
+            dataset_kwargs=dataset_kwargs_trafo,
+            dtype=dtype,
+            device=device
+            )
+
+    if not isinstance(ray_trafo, MultiBlurringTrafoIter):
+        ray_trafo.to(dtype=dtype, device=device)
 
     net_kwargs = {
         'scales': cfg.dip.net.scales,
@@ -123,6 +133,16 @@ def coordinator(cfg : DictConfig) -> None:
             'data_path': cfg.source_dataset.data_path,
             'im_size': cfg.source_dataset.im_size,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_multi_stddev_white_noise': cfg.source_dataset.use_multi_stddev_white_noise,
+            'use_fixed_seeds_starting_from': cfg.seed 
+        }
+    elif cfg.source_dataset.name in ('image_net'):
+        dataset_kwargs = {
+            'name': cfg.source_dataset.name,
+            'data_path': cfg.source_dataset.data_path,
+            'im_size': cfg.source_dataset.im_size,
+            'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
+            'use_multi_stddev_white_noise': cfg.source_dataset.use_multi_stddev_white_noise,
             'use_fixed_seeds_starting_from': cfg.seed 
         }
     else: 

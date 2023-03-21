@@ -14,7 +14,7 @@ def ground_truth_images_paths(data_path: str = './'):
     # paths = glob.glob(
     #     os.path.join(data_path, '*.png')
     #     )
-    paths = ['F16_512.png', 'House.png', 'Lena512.png', 'Peppers512.png',  'Baboon512.png']
+    paths = ['F16_512.png', 'House.png', 'Lena512.png']
     paths = [os.path.join(data_path, s) for s in paths]
     return iter(paths), len(paths)
 

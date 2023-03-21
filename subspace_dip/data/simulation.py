@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .trafo import BaseRayTrafo
+from .trafo import BaseRayTrafo, MultiBlurringTrafoIter
 
 
 def simulate(x: Tensor, ray_trafo: BaseRayTrafo, white_noise_rel_stddev: float,
@@ -59,8 +59,9 @@ class SimulatedDataset(torch.utils.data.Dataset):
 
     def __init__(self,
             image_dataset: Union[Sequence[Tensor], Iterable[Tensor]],
-            ray_trafo: BaseRayTrafo,
+            ray_trafo: Union[BaseRayTrafo, MultiBlurringTrafoIter],
             white_noise_rel_stddev: float,
+            use_multi_stddev_white_noise: bool = False,
             use_fixed_seeds_starting_from: Optional[int] = 1,
             rng: Optional[np.random.Generator] = None,
             device: Optional[Any] = None):
@@ -73,10 +74,14 @@ class SimulatedDataset(torch.utils.data.Dataset):
             fail if they are not supported. The method :meth:`__iter__` simply
             iterates over `image_dataset` and thus will only stop when
             `image_dataset` is exhausted.
-        ray_trafo : :class:`bayes_dip.data.BaseRayTrafo`
-            Ray trafo.
+        ray_trafo : :class:`bayes_dip.data.BaseRayTrafo` or class:`bayes_dip.data.MultiBlurringTrafoIter`
+            Ray trafo or iterator class of ray trafos.
         white_noise_rel_stddev : float
             Relative standard deviation of the noise that is added.
+        use_multi_stddev_white_noise : bool 
+            If `True`, `white_noise_rel_stddev` is uniformly sampled between 
+            `0.05` and `white_noise_rel_stddev`.
+            The default is `False`.
         use_fixed_seeds_starting_from : int, optional
             If an int, the fixed random seed
             ``use_fixed_seeds_starting_from + idx`` is used for sample `idx`.
@@ -102,6 +107,7 @@ class SimulatedDataset(torch.utils.data.Dataset):
                     'must not use fixed seeds when passing a custom rng')
         self.rng = rng
         self.use_fixed_seeds_starting_from = use_fixed_seeds_starting_from
+        self.use_multi_stddev_white_noise = use_multi_stddev_white_noise
         self.device = device
 
     def __len__(self) -> Union[int, float]:
@@ -116,12 +122,22 @@ class SimulatedDataset(torch.utils.data.Dataset):
         else:
             rng = self.rng
 
+        white_noise_rel_stddev = self.white_noise_rel_stddev
+        if self.use_multi_stddev_white_noise:
+            white_noise_rel_stddev = rng.uniform(
+                    low=0.05,
+                    high=white_noise_rel_stddev
+                )
+        ray_trafo = self.ray_trafo
+        if isinstance(self.ray_trafo, MultiBlurringTrafoIter): 
+            ray_trafo = next(ray_trafo)
+
         x = x.to(device=self.device)
         noisy_observation = simulate(x[None],
-                ray_trafo=self.ray_trafo,
-                white_noise_rel_stddev=self.white_noise_rel_stddev,
+                ray_trafo=ray_trafo,
+                white_noise_rel_stddev=white_noise_rel_stddev,
                 rng=rng)[0].to(device=self.device)
-        filtbackproj = self.ray_trafo.fbp(noisy_observation[None])[0].to(
+        filtbackproj = ray_trafo.fbp(noisy_observation[None])[0].to(
                 device=self.device)
 
         return noisy_observation, x, filtbackproj

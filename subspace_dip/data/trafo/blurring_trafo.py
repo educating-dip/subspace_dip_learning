@@ -1,6 +1,8 @@
-from typing import Union, Tuple, Optional, Callable
+from typing import Union, Tuple, Optional, Callable, Any
+
 import torch
 import numpy as np
+
 from torch import Tensor
 from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
 
@@ -106,3 +108,34 @@ class BlurringTrafo(BaseRayTrafo):
 
     trafo_flat = BaseRayTrafo._trafo_flat_via_trafo
     trafo_adjoint_flat = BaseRayTrafo._trafo_adjoint_flat_via_trafo_adjoint
+
+class MultiBlurringTrafoIter:
+    def __init__(self, 
+        im_shape: Union[Tuple[int, int], Tuple[int, int, int]],
+        flt_size: int = 15,
+        rstddev: Tuple[float, float] = (0.4, 1.6),
+        P_eps: float = 5e-2,
+        pinv_fun: Optional[Callable[[Tensor], Tensor]] = None,
+        dtype: Optional[Any] = None,
+        device: Optional[Any] = None 
+        ):
+
+        self.rng = np.random.default_rng()
+        self.rstddev = rstddev
+        self.trafo_kwargs = {
+            'im_shape': im_shape, 'flt_size': flt_size, 
+            'P_eps': P_eps, 'pinv_fun': pinv_fun
+            }
+        self.device=device
+        self.dtype=dtype
+
+    def __iter__(self, ):
+        return self 
+    
+    def __next__(self, ): 
+        std = self.rng.uniform(
+            low=self.rstddev[0], high=self.rstddev[1]
+            )
+        self.trafo_kwargs['std'] = std
+        trafo = BlurringTrafo(**self.trafo_kwargs)
+        return trafo.to(dtype=self.dtype, device=self.device)

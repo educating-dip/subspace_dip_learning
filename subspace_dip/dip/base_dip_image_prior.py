@@ -1,7 +1,7 @@
 """
 Provides :class:`BaseDeepImagePrior`.
 """
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Dict
 from abc import ABC, abstractmethod
 from contextlib import nullcontext
 
@@ -28,13 +28,14 @@ class BaseDeepImagePrior(ABC):
     def __init__(self,
             ray_trafo: BaseRayTrafo,
             torch_manual_seed: Union[int, None] = 1,
+            net_kwargs: Dict = None,
             device: Optional[Any] = None,
-            net_kwargs=None):
+            ):
 
         self.device = device or torch.device(
                 ('cuda:0' if torch.cuda.is_available() else 'cpu')
             )
-        self.ray_trafo = ray_trafo.to(self.device)
+        self.ray_trafo = ray_trafo
         self.net_kwargs = net_kwargs
         self.init_nn_model(torch_manual_seed)
         self.net_input = None

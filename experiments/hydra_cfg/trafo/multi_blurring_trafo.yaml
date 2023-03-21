@@ -1,0 +1,4 @@
+natural_trafo_type: multi_blurring
+flt_size: 15
+rstddev: [0.4, 2]
+P_eps: 5e-2
