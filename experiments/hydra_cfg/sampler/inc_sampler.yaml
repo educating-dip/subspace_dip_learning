@@ -3,6 +3,6 @@ defaults:
 
 sampling:
   use_incremental_sampling: True
-  batch_size: 10
+  batch_size: 500
   gamma: 0.95
   
