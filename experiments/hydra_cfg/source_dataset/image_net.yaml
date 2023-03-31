@@ -3,3 +3,4 @@ im_size: 256
 data_path: ./
 noise_stddev: 0.05
 use_multi_stddev_white_noise: False
+num_train_images: 32000

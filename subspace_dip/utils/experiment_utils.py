@@ -275,6 +275,7 @@ def get_standard_training_dataset(
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_multi_stddev_white_noise=dataset_kwargs['use_multi_stddev_white_noise'],
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
+                num_images=dataset_kwargs.get('num_train_images', -1),
                 device=device
             )
             dataset_validation = get_image_net_dataset(
