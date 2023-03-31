@@ -12,6 +12,7 @@ class IncremetalSVD:
         self.n_eigenvecs = n_eigenvecs
         self.gamma = gamma
         self.batch_size = batch_size
+        self.should_exclude_cnt = 0
         self.stop = False
     
     def start_tracking(self, data: np.asarray) -> None:
@@ -36,21 +37,22 @@ class IncremetalSVD:
             Q[:, i] = q / scipy.linalg.norm(q)
         self.U = Q
     
-    def _stop_criterion(self, K: np.ndarray ) -> bool:
+    def _should_exclude(self, K: np.ndarray ) -> bool:
         KTK = K.T @ K
         sqrt_det = scipy.linalg.det(KTK) ** .5
-        eps = np.finfo(np.float32).eps * 1e2
+        eps = 2 * np.finfo(np.float32).eps
         return sqrt_det < eps
 
     def update(self, 
         C: np.ndarray, 
         eps: float = 1e-3, 
-        use_reorthogonalise: bool = False ) -> None:
+        use_reorthogonalise: bool = False, 
+        patience: int = 1000
+        ) -> None:
         
         ndim = C.ndim
         C  = C[:, None] if ndim == 1 else C
         assert C.shape[1] == self.batch_size
-
         L = self.U.T @ C
         if self.batch_size > 1 :
             H = C - self.U @ L
@@ -59,11 +61,13 @@ class IncremetalSVD:
             UL = self.U @ L
             K = (C.T @ C - 2 * L.T @ L + UL.T @ UL) ** .5 
             J = (C - UL) / K
-        
-        if self._stop_criterion(K=K):
-            self.stop = True
+        if self._should_exclude(K=K):
+            self.should_exclude_cnt += 1
+            if self.should_exclude_cnt == patience:
+                self.stop = True
             return 
-    
+        self.should_exclude_cnt = 0
+
         upQ = np.concatenate([np.diag(self.s), L], axis=1)
         bttmQ = np.concatenate([np.zeros((K.shape[0], self.s.shape[0])), K], axis=1)
         Q = np.concatenate([upQ, bttmQ], axis=0)
