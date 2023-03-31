@@ -11,7 +11,7 @@ from .datasets import (
         CartoonSetDataset, 
         MayoDataset,
         NaturalImagesMiniDataset, 
-        ImageNet,
+        ImageNetDataset,
         get_ellipses_dataset, 
         get_disk_dist_ellipses_dataset, 
         get_lodopab_dataset,

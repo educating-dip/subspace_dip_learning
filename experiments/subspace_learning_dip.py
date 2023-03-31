@@ -121,7 +121,8 @@ def coordinator(cfg : DictConfig) -> None:
             'im_size': cfg.source_dataset.im_size,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
             'use_multi_stddev_white_noise': cfg.source_dataset.use_multi_stddev_white_noise,
-            'use_fixed_seeds_starting_from': cfg.seed 
+            'use_fixed_seeds_starting_from': cfg.seed,
+            'num_train_images': cfg.source_dataset.num_train_images,
         }
     else: 
         raise  NotImplementedError
