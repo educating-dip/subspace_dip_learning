@@ -20,7 +20,7 @@ class IncremetalSVD:
         if self.data.shape[1] > 1: 
             rank = min(self.data.shape)
             self.U, self.s, VT = tl.partial_svd(
-                    data=self.data, n_eigenvecs=rank)
+                    matrix=self.data, n_eigenvecs=rank)
             self.V = VT.T
         else:
             self.s = np.asarray(
