@@ -65,7 +65,7 @@ class IncremetalSVD:
             return 
     
         upQ = np.concatenate([np.diag(self.s), L], axis=1)
-        bttmQ = np.concatenate([np.zeros(self.s.shape)[None, :], K], axis=1)
+        bttmQ = np.concatenate([np.zeros((K.shape[0], self.s.shape[0])), K], axis=1)
         Q = np.concatenate([upQ, bttmQ], axis=0)
         Up, sp, VpT = scipy.linalg.svd(Q)
         self.U = np.concatenate([self.U, J], axis=1)
