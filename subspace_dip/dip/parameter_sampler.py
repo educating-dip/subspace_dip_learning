@@ -184,7 +184,6 @@ class ParameterSampler:
                                             self.incremental_svd.update(
                                                 C=self.get_parameters_matrix_from_list(return_numpy=True))
                                             self.reset_parameters_samples()
-                                            print(self.incremental_svd.U.shape)
                                 else:
                                     if num_grad_updates in self.sampling_sequence:
                                         self.add_parameters_samples()
