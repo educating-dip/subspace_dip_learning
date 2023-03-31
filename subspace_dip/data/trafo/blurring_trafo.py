@@ -122,8 +122,7 @@ class MultiBlurringTrafoIter(Iterable):
             'P_eps': P_eps, 'pinv_fun': pinv_fun
             }
 
-    def to(self, dtype = None, device = None ) -> None:
-
+    def to(self, dtype = None, device = None) -> None:
         self.dtype = dtype
         self.device = device
 
