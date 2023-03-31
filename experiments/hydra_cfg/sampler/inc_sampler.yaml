@@ -1,0 +1,8 @@
+defaults:
+  - base_sampler
+
+sampling:
+  use_incremental_sampling: True
+  batch_size: 10
+  gamma: 0.95
+  

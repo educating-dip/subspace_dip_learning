@@ -3,6 +3,7 @@ from typing import Union, Tuple, Optional, Callable, Any
 import torch
 import numpy as np
 
+from collections.abc import Iterable
 from torch import Tensor
 from subspace_dip.data.trafo.base_ray_trafo import BaseRayTrafo
 
@@ -76,9 +77,6 @@ class BlurringTrafo(BaseRayTrafo):
         super().__init__(im_shape=im_shape, obs_shape=im_shape)
 
         h = get_gauss_flt(flt_size, std)
-        def flip_np(x):
-            x_ = np.flip(np.roll(x, ((x.shape[0] // 2), (x.shape[1] // 2)), (0, 1)))
-            return np.roll(x_, (- (x_.shape[0] // 2), -(x_.shape[1] // 2)), (0, 1))
         h_np = np.array(h.clone().cpu())[0, 0, :, :]
         H = fft_np(h_np, s=im_shape)
         H = zero_SV(H, P_eps)
@@ -109,25 +107,25 @@ class BlurringTrafo(BaseRayTrafo):
     trafo_flat = BaseRayTrafo._trafo_flat_via_trafo
     trafo_adjoint_flat = BaseRayTrafo._trafo_adjoint_flat_via_trafo_adjoint
 
-class MultiBlurringTrafoIter:
+class MultiBlurringTrafoIter(Iterable):
     def __init__(self, 
         im_shape: Union[Tuple[int, int], Tuple[int, int, int]],
         flt_size: int = 15,
-        rstddev: Tuple[float, float] = (0.4, 1.6),
+        rstddev: Tuple[float, float] = (0.25, 2),
         P_eps: float = 5e-2,
-        pinv_fun: Optional[Callable[[Tensor], Tensor]] = None,
-        dtype: Optional[Any] = None,
-        device: Optional[Any] = None 
+        pinv_fun: Optional[Callable[[Tensor], Tensor]] = None
         ):
-
         self.rng = np.random.default_rng()
         self.rstddev = rstddev
         self.trafo_kwargs = {
             'im_shape': im_shape, 'flt_size': flt_size, 
             'P_eps': P_eps, 'pinv_fun': pinv_fun
             }
-        self.device=device
-        self.dtype=dtype
+
+    def to(self, dtype = None, device = None ) -> None:
+
+        self.dtype = dtype
+        self.device = device
 
     def __iter__(self, ):
         return self 

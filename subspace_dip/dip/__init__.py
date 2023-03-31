@@ -12,3 +12,4 @@ from .natural_gradient_optim import NGD
 from .utils import gramschmidt, stats_to_writer
 from .early_stopping_criteria import EarlyStop
 from .fisher_info_utils import Damping, SamplingProbes
+from .incremental_svd import IncremetalSVD

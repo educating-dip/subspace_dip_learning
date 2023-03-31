@@ -36,7 +36,7 @@ def get_standard_ray_trafo(ray_trafo_kwargs: dict, dataset_kwargs: Dict):
         raise ValueError
     return get_ray_trafo(dataset_kwargs['name'], kwargs=kwargs)
 
-def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict, dtype: Optional[Any] = None, device: Optional[Any] = None):
+def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict):
     if natural_trafo_kwargs['natural_trafo_type'] == 'identity':
         trafo = IdentityTrafo(
                 im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size'])
@@ -54,9 +54,7 @@ def get_standard_natural_trafo(natural_trafo_kwargs: dict, dataset_kwargs: Dict,
                 im_shape=(dataset_kwargs['im_size'], dataset_kwargs['im_size']),
                 flt_size=natural_trafo_kwargs['flt_size'],
                 rstddev=natural_trafo_kwargs['rstddev'],
-                P_eps=natural_trafo_kwargs['P_eps'],
-                device=device,
-                dtype=dtype
+                P_eps=natural_trafo_kwargs['P_eps']
             )
     else:
         raise ValueError()

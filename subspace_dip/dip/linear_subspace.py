@@ -8,7 +8,7 @@ import torch
 import torch as Tensor
 import torch.nn as nn
 import tensorly as tl
-tl.set_backend('pytorch')
+tl.set_backend('numpy')
 
 from math import ceil
 from subspace_dip.utils import get_original_cwd
@@ -130,7 +130,7 @@ class LinearSubspace(nn.Module):
         if not use_approx:
             # https://github.com/tensorly/tensorly/blob/15d9647e08dee10c990fe2731a1b92db6428bad9/tensorly/contrib/sparse/backend/numpy_backend.py
             ortho_bases, singular_values, _  = tl.partial_svd(
-                params_mat,
+                params_mat.cpu().numpy(),
                 n_eigenvecs=subspace_dim
                 )
         else:

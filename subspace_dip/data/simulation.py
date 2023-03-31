@@ -7,7 +7,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .trafo import BaseRayTrafo, MultiBlurringTrafoIter
+from collections.abc import Iterable as IterableABC
+
+from .trafo import BaseRayTrafo
 
 
 def simulate(x: Tensor, ray_trafo: BaseRayTrafo, white_noise_rel_stddev: float,
@@ -59,7 +61,7 @@ class SimulatedDataset(torch.utils.data.Dataset):
 
     def __init__(self,
             image_dataset: Union[Sequence[Tensor], Iterable[Tensor]],
-            ray_trafo: Union[BaseRayTrafo, MultiBlurringTrafoIter],
+            ray_trafo: Union[BaseRayTrafo, IterableABC],
             white_noise_rel_stddev: float,
             use_multi_stddev_white_noise: bool = False,
             use_fixed_seeds_starting_from: Optional[int] = 1,
@@ -129,8 +131,8 @@ class SimulatedDataset(torch.utils.data.Dataset):
                     high=white_noise_rel_stddev
                 )
         ray_trafo = self.ray_trafo
-        if isinstance(self.ray_trafo, MultiBlurringTrafoIter): 
-            ray_trafo = next(ray_trafo)
+        if isinstance(self.ray_trafo, IterableABC):
+            ray_trafo = next(self.ray_trafo)
 
         x = x.to(device=self.device)
         noisy_observation = simulate(x[None],
