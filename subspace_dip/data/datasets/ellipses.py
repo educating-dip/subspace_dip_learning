@@ -138,7 +138,8 @@ class DiskDistributedEllipsesDataset(EllipsesDataset):
             x = np.cos(c_a) * c_r
             y = np.sin(c_a) * c_r
             rot = self.rng.uniform(0., 2 * np.pi, (max_n_ellipse,))
-            n_ellipse = min(self.rng.poisson(40), max_n_ellipse)
+            mean = 10 + 0.5*(max_n_ellipse-10)
+            n_ellipse = min(self.rng.poisson(mean), max_n_ellipse)
             v[n_ellipse:] = 0.
             ellipsoids = np.stack((v, a1, a2, x, y, rot), axis=1)
             self.ellipses_data.append(ellipsoids)
