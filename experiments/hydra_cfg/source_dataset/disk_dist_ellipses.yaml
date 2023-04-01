@@ -1,6 +1,7 @@
 name: disk_dist_ellipses
 im_size: 501
 diameter: 0.4745
+max_n_ellipse: 70
 length: 
   train: 32000
   validation: 3200

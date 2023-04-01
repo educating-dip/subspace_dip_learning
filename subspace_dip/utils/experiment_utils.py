@@ -209,6 +209,7 @@ def get_standard_training_dataset(
                 im_size=dataset_kwargs['im_size'], 
                 length=dataset_kwargs['length']['train'],
                 diameter=dataset_kwargs['diameter'],
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=device
@@ -218,6 +219,7 @@ def get_standard_training_dataset(
                 fold='validation', 
                 im_size=dataset_kwargs['im_size'],
                 diameter=dataset_kwargs['diameter'],
+                max_n_ellipse=dataset_kwargs['max_n_ellipse'],
                 length=dataset_kwargs['length']['validation'], 
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 

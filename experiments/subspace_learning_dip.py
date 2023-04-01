@@ -96,6 +96,7 @@ def coordinator(cfg : DictConfig) -> None:
                 'train': cfg.source_dataset.length.train,
                 'validation': cfg.source_dataset.length.validation,
                 },
+            'max_n_ellipse': cfg.source_dataset.max_n_ellipse,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
             'use_fixed_seeds_starting_from': cfg.seed,
         }
