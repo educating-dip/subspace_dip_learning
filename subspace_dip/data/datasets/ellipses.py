@@ -23,7 +23,9 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
             length : int = 3200, 
             fixed_seed : int = 1, 
             fold : str = 'train', 
-            max_n_ellipse : int = 70
+            max_n_ellipse : int = 70, 
+            use_mask_disk : bool = False, 
+            radius : float = 0.715
         ):
 
         self.shape = shape
@@ -37,6 +39,12 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
             fixed_seed=fixed_seed,
             fold=fold
         )
+        self.use_mask_disk = use_mask_disk
+        if self.use_mask_disk: 
+            self.disk_mask = np.linalg.norm(np.stack(
+                    np.meshgrid(np.linspace(-1., 1., self.shape[0]), np.linspace(-1., 1., self.shape[1]))
+                ), axis=0) < radius
+            
         super().__init__()
 
     def setup_fold(self, 
@@ -74,6 +82,8 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
         ellipsoids = self.ellipses_data[idx]
         image = ellipsoid_phantom(self.space, ellipsoids)
         # normalize the foreground (all non-zero pixels) to [0., 1.]
+        if self.use_mask_disk:
+            image[np.logical_not(self.disk_mask)] = 0.
         image[np.array(image) != 0.] -= np.min(image)
         image /= np.max(image)
 
@@ -89,22 +99,26 @@ class EllipsesDataset(torch.utils.data.IterableDataset):
         self._extend_ellipses_data(idx + 1)
         return self._generate_item(idx)
 
-
 def get_ellipses_dataset(
         ray_trafo: BaseRayTrafo, 
         fold : str = 'train', 
         im_size : int = 128, 
         length : int = 3200,
-        max_n_ellipse : int = 70, 
+        max_n_ellipse : int = 70,
         white_noise_rel_stddev : float = .05, 
         use_fixed_seeds_starting_from : int = 1, 
-        device : Optional[Any] = None) -> SimulatedDataset:
+        use_mask_disk : bool = False, 
+        radius : float = 0.715,
+        device : Optional[Any] = None
+        ) -> SimulatedDataset:
 
     image_dataset = EllipsesDataset(
             (im_size, im_size), 
             length=length,
             fold=fold,
-            max_n_ellipse=max_n_ellipse
+            max_n_ellipse=max_n_ellipse, 
+            use_mask_disk=use_mask_disk, 
+            radius=radius
             )
     
     return SimulatedDataset(

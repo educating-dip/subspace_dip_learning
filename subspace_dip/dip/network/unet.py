@@ -6,7 +6,6 @@ import torch
 from torch import nn, Tensor
 import numpy as np
 
-
 class UNet(nn.Module):
     """U-Net model"""
     def __init__(self,
@@ -66,7 +65,7 @@ class UNet(nn.Module):
 
     def forward(self,
             x0: Tensor,
-            saturation_safety: bool = True,
+            saturation_safety: bool = False,
             return_pre_sigmoid: bool = False
             ) -> Tensor:
         """

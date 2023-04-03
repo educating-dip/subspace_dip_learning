@@ -87,7 +87,7 @@ class ParameterSampler:
         optim_kwargs : Dict,
         save_samples: bool = False, 
         use_incremental_sampling: bool = False,
-        incremental_sampling_kwargs: Optional[Dict] = None
+        incremental_sampling_kwargs: Optional[Dict] = None, 
         ):
 
         current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
@@ -157,6 +157,7 @@ class ParameterSampler:
                         if (self.use_incremental_sampling and self.incremental_svd.stop
                                         and phase == 'train'): 
                             break
+                        
                         fbp = fbp.to(self.device)
                         gt = gt.to(self.device)
                         # zero the parameter gradients
@@ -165,7 +166,13 @@ class ParameterSampler:
                         # track gradients only if in train phase
                         with torch.set_grad_enabled(phase == 'train'):
                             outputs = self.model(fbp)
-                            loss = criterion(outputs, gt)
+                            if getattr(dataset_train.image_dataset, 'use_mask_disk', False):
+                                mask = torch.from_numpy(
+                                    dataset_train.image_dataset.disk_mask)
+                                loss = criterion(outputs[..., mask], gt[..., mask])
+                            else:
+                                loss = criterion(outputs, gt)
+
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
@@ -191,7 +198,11 @@ class ParameterSampler:
                         for i in range(outputs.shape[0]):
                             gt_ = gt[i, :].detach().cpu().numpy()
                             outputs_ = outputs[i, :].detach().cpu().numpy()
-                            running_psnr += PSNR(outputs_, gt_)
+                            if getattr(dataset_train.image_dataset, 'use_mask_disk', False):
+                                mask = dataset_train.image_dataset.disk_mask
+                                running_psnr += PSNR(outputs_[..., mask], gt_[..., mask])
+                            else: 
+                                running_psnr += PSNR(outputs_, gt_)
                         # statistics
                         running_loss += loss.item() * outputs.shape[0]
                         running_size += outputs.shape[0]
@@ -210,9 +221,9 @@ class ParameterSampler:
                     epoch_loss = running_loss / dataset_sizes[phase]
                     epoch_psnr = running_psnr / dataset_sizes[phase]
                     if (phase == 'train' and (optim_kwargs['save_best_learned_params_path'] is not None) 
-                            and optim_kwargs['save_best_learned_params_per_epoch'] and (epoch%100==0) ):            
+                            and optim_kwargs['save_best_learned_params_per_epoch']):        
                         self.save_learned_params(
-                                optim_kwargs['save_best_learned_params_path'], 
+                                optim_kwargs['save_best_learned_params_path'],
                                 comment=f'epoch_{epoch}_'
                             )
                     if phase == 'validation':

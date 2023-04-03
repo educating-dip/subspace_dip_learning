@@ -181,11 +181,13 @@ def get_standard_training_dataset(
         if dataset_kwargs['name'] in ('ellipses', 'ellipses_mayo'):
 
             dataset_train = get_ellipses_dataset(
-                ray_trafo=ray_trafo, 
-                fold='train', 
-                im_size=dataset_kwargs['im_size'], 
-                length=dataset_kwargs['length']['train'], 
+                ray_trafo=ray_trafo,
+                fold='train',
+                im_size=dataset_kwargs['im_size'],
+                length=dataset_kwargs['length']['train'],
                 max_n_ellipse=dataset_kwargs['max_n_ellipse'],
+                use_mask_disk=dataset_kwargs['use_mask_disk'], 
+                radius=dataset_kwargs['radius'],
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=device
@@ -196,6 +198,8 @@ def get_standard_training_dataset(
                 im_size=dataset_kwargs['im_size'],
                 length=dataset_kwargs['length']['validation'],
                 max_n_ellipse=dataset_kwargs['max_n_ellipse'],
+                use_mask_disk=dataset_kwargs['use_mask_disk'], 
+                radius=dataset_kwargs['radius'],   
                 white_noise_rel_stddev=dataset_kwargs['white_noise_rel_stddev'], 
                 use_fixed_seeds_starting_from=dataset_kwargs['use_fixed_seeds_starting_from'], 
                 device=device

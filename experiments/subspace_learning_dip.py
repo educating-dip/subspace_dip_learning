@@ -84,6 +84,8 @@ def coordinator(cfg : DictConfig) -> None:
                 'validation': cfg.source_dataset.length.validation,
                 },
             'max_n_ellipse': cfg.source_dataset.max_n_ellipse,
+            'use_mask_disk': cfg.source_dataset.use_mask_disk, 
+            'radius': cfg.source_dataset.radius,
             'white_noise_rel_stddev': cfg.source_dataset.noise_stddev,
             'use_fixed_seeds_starting_from': cfg.seed, 
         }
