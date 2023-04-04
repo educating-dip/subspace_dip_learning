@@ -133,8 +133,8 @@ class LinearSubspace(nn.Module):
                 params_mat.cpu().numpy(),
                 n_eigenvecs=subspace_dim
                 )
-            ortho_bases = torch.from_numpy(ortho_bases)
-            singular_values = torch.from_numpy(singular_values)
+            ortho_bases = torch.from_numpy(ortho_bases.copy())
+            singular_values = torch.from_numpy(singular_values.copy())
         else:
             # https://docs.dask.org/en/stable/generated/dask.array.linalg.svd_compressed.html
             # params_mat_da = da.from_array(
