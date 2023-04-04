@@ -58,6 +58,7 @@ class DeepImagePrior(BaseDeepImagePrior):
         optim_kwargs.setdefault('lr', 1e-4)
         optim_kwargs.setdefault('iterations', 10000)
         optim_kwargs.setdefault('loss_function', 'mse')
+        optim_kwargs.setdefault('clip_grad_max_norm', 1)
 
         self.nn_model.train()
 
@@ -99,7 +100,7 @@ class DeepImagePrior(BaseDeepImagePrior):
                 if use_tv_loss:
                     loss = loss + optim_kwargs['gamma'] * tv_loss(output)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.nn_model.parameters(), max_norm=1)
+                torch.nn.utils.clip_grad_norm_(self.nn_model.parameters(), max_norm=optim_kwargs['clip_grad_max_norm'])
 
                 if loss.item() < min_loss_state['loss']:
                     min_loss_state['loss'] = loss.item()

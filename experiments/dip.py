@@ -78,19 +78,18 @@ def coordinator(cfg : DictConfig) -> None:
             torch.manual_seed(cfg.seed + i)  # for reproducible noise in simulate
         
         observation, ground_truth, filtbackproj = data_sample
-        
         observation = observation.to(dtype=dtype, device=device)
         filtbackproj = filtbackproj.to(dtype=dtype, device=device)
         ground_truth = ground_truth.to(dtype=dtype, device=device)
 
         use_norm_op = cfg.trafo.get('use_norm_op', False)
         gamma = cfg.dip.optim.gamma if not use_norm_op else cfg.dip.optim.gamma * ray_trafo.norm_const **2
-
         optim_kwargs = {
                 'lr': cfg.dip.optim.lr,
                 'iterations': cfg.dip.optim.iterations,
                 'loss_function': cfg.dip.optim.loss_function,
                 'gamma': gamma,
+                'clip_grad_max_norm': cfg.dip.optim.clip_grad_max_norm,
                 'use_early_stop': cfg.dip.optim.use_early_stop,
                 'buffer_size': cfg.dip.optim.buffer_size,
                 'patience': cfg.dip.optim.patience

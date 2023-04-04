@@ -13,6 +13,7 @@ optim:
   loss_function: mse
   gamma: 1e-4
   optimizer: adam
+  clip_grad_max_norm: 1
   use_early_stop: False
   buffer_size: 100
   patience: 1000
