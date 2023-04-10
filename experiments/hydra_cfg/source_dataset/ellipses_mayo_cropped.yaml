@@ -1,6 +1,8 @@
 name: ellipses_mayo
 im_size: 362
 max_n_ellipse: 140
+use_mask_disk: False
+radius: null
 length: 
   train: 32000
   validation: 3200
