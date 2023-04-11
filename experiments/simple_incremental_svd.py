@@ -12,13 +12,14 @@ matrix = np.random.randn(1000, 1000)
 matrix[np.diag_indices(matrix.shape[0])] += np.float32(
     np.exp(-np.random.uniform(low=0, high=10, size=1000)))
 matrix = matrix[:, :100]
-
+batch_size = 10
 U, s, VT = tl.partial_svd(matrix=matrix, n_eigenvecs=100)
-svd = IncremetalSVD(n_eigenvecs=100, batch_size=1, gamma=1)
+svd = IncremetalSVD(n_eigenvecs=100, batch_size=batch_size, gamma=1)
 svd.start_tracking(data=matrix[:, :1])
 
-for column in range(1, 100):
-    stop = svd.update(C=matrix[:, column])
+for column in range(1, 100, batch_size):
+    C=matrix[:, column: column + batch_size]
+    stop = svd.update(C=C)
     if stop: 
         break
 print(scipy.linalg.norm(s - svd.s) / scipy.linalg.norm(s))

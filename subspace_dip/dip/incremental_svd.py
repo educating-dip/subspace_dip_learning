@@ -47,12 +47,13 @@ class IncremetalSVD:
         C: np.ndarray, 
         eps: float = 1e-3, 
         use_reorthogonalise: bool = False, 
+        use_should_exclude: bool = False, 
         patience: int = 1000
         ) -> None:
         
         ndim = C.ndim
         C  = C[:, None] if ndim == 1 else C
-        assert C.shape[1] == self.batch_size
+        assert (C.shape[1] < self.batch_size or C.shape[1] == self.batch_size)
         L = self.U.T @ C
         if self.batch_size > 1 :
             H = C - self.U @ L
@@ -61,12 +62,14 @@ class IncremetalSVD:
             UL = self.U @ L
             K = (C.T @ C - 2 * L.T @ L + UL.T @ UL) ** .5 
             J = (C - UL) / K
-        if self._should_exclude(K=K):
-            self.should_exclude_cnt += 1
-            if self.should_exclude_cnt == patience:
-                self.stop = True
-            return 
-        self.should_exclude_cnt = 0
+
+        if use_should_exclude: 
+            if self._should_exclude(K=K):
+                self.should_exclude_cnt += 1
+                if self.should_exclude_cnt == patience:
+                    self.stop = True
+                return 
+            self.should_exclude_cnt = 0
 
         upQ = np.concatenate([np.diag(self.s), L], axis=1)
         bttmQ = np.concatenate([np.zeros((K.shape[0], self.s.shape[0])), K], axis=1)
