@@ -85,7 +85,6 @@ class ParameterSampler:
         ray_trafo : BaseRayTrafo,
         dataset_kwargs : Dict, 
         optim_kwargs : Dict,
-        save_samples: bool = False, 
         use_incremental_sampling: bool = False,
         incremental_sampling_kwargs: Optional[Dict] = None, 
         ):
@@ -139,6 +138,7 @@ class ParameterSampler:
         self.model.to(self.device)
         self.model.train()
         num_grad_updates = 0
+        _has_saved = False
         for epoch in range(optim_kwargs['epochs']):
             if (    self.use_incremental_sampling and self.incremental_svd.stop     ): 
                 break 
@@ -194,7 +194,7 @@ class ParameterSampler:
                                 else:
                                     if num_grad_updates in self.sampling_sequence:
                                         self.add_parameters_samples()
-                                           
+                                                   
                         for i in range(outputs.shape[0]):
                             gt_ = gt[i, :].detach().cpu().numpy()
                             outputs_ = outputs[i, :].detach().cpu().numpy()
@@ -217,6 +217,15 @@ class ParameterSampler:
                     if phase == 'train':
                         if self._scheduler is not None:
                             self._scheduler.step()
+
+                        if optim_kwargs['save_samples_every_n_epoch']: 
+                            if (    optim_kwargs['save_samples'] and 
+                                        (epoch % optim_kwargs['save_samples_every_n_epoch'] == 0 or epoch == optim_kwargs['epochs']-1) and 
+                                            not self.use_incremental_sampling):
+                                name = f'parameters_samples_{epoch}'
+                                self.save_sampled_parameters(name=name)
+                                _has_saved = True 
+                                self.reset_parameters_samples()
                         
                     epoch_loss = running_loss / dataset_sizes[phase]
                     epoch_psnr = running_psnr / dataset_sizes[phase]
@@ -255,7 +264,10 @@ class ParameterSampler:
         self.model.load_state_dict(best_model_wts)
         
         self.writer.close()
-        if ( save_samples and not self.use_incremental_sampling ): self.save_sampled_parameters()
+        if ( optim_kwargs['save_samples'] and 
+                not self.use_incremental_sampling and 
+                    not _has_saved ) : self.save_sampled_parameters()
+        
         if self.use_incremental_sampling: self.incremental_svd.save_ortho_basis()
 
     def init_optimizer(self, optim_kwargs: Dict):

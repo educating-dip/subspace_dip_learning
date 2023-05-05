@@ -64,6 +64,8 @@ def coordinator(cfg : DictConfig) -> None:
         'num_samples': cfg.sampler.sampling.num_samples,
         'burn_in': cfg.sampler.sampling.burn_in,
         'sampling_strategy': cfg.sampler.sampling.sampling_strategy,
+        'save_samples': cfg.sampler.sampling.save_samples,
+        'save_samples_every_n_epoch': cfg.sampler.sampling.save_samples_every_n_epoch,
         'batch_size': cfg.sampler.training.batch_size,
         'optimizer': {
             'lr': cfg.sampler.training.optim.lr,
@@ -142,7 +144,6 @@ def coordinator(cfg : DictConfig) -> None:
         optim_kwargs=optim_kwargs, 
         use_incremental_sampling=cfg.sampler.sampling.use_incremental_sampling, 
         incremental_sampling_kwargs=incremental_sampling_kwargs, 
-        save_samples=cfg.sampler.sampling.save_samples
     )
 
 if __name__ == '__main__':

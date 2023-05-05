@@ -9,6 +9,7 @@ import torch as Tensor
 import torch.nn as nn
 import tensorly as tl
 tl.set_backend('numpy')
+import numpy as np 
 
 from math import ceil
 from subspace_dip.utils import get_original_cwd
@@ -21,9 +22,11 @@ class LinearSubspace(nn.Module):
         use_random_init: bool = True,
         subspace_dim: Optional[int] = None,
         num_random_projs: Optional[int] = None,
+        num_net_params: Optional[int] = None,
         use_approx: bool = False,
         load_ortho_basis_path: Optional[str] = None,
         params_space_retain_ftc: Optional[float] = None,
+        use_random_basis: bool = False, 
         device: Optional[Any] = None
         ) -> None:
 
@@ -34,22 +37,29 @@ class LinearSubspace(nn.Module):
         self.device = device or torch.device(
             ('cuda:0' if torch.cuda.is_available() else 'cpu')
         )
-        if parameters_samples_list is not None: 
-            self.parameters_samples_list = parameters_samples_list
-            self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
-                subspace_dim=subspace_dim,
-                num_random_projs=num_random_projs,
-                use_approx=use_approx, 
-                )
-        else: 
-            self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
-            self.params_space_retain_ftc = params_space_retain_ftc
-            self.is_trimmed = False
-            if self.params_space_retain_ftc is not None:
-                self.is_trimmed = True
-                self._trimming_params_in_subspace()
+        self.is_trimmed = False
+        if not use_random_basis:
+            if parameters_samples_list is not None: 
+                self.parameters_samples_list = parameters_samples_list
+                self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
+                    subspace_dim=subspace_dim,
+                    num_random_projs=num_random_projs,
+                    use_approx=use_approx, 
+                    )
+            else: 
+                self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
+                self.params_space_retain_ftc = params_space_retain_ftc
+                if self.params_space_retain_ftc is not None:
+                    self.is_trimmed = True
+                    self._trimming_params_in_subspace()
             self.ortho_basis = self.ortho_basis.to(self.device)
             self.singular_values = self.singular_values.to(self.device)
+        else:
+            assert params_space_retain_ftc is None and num_net_params is not None
+            self.ortho_basis = torch.randn(
+                (num_net_params, subspace_dim)   ).to(self.device) 
+            self.ortho_basis = self.ortho_basis / self.ortho_basis.norm(dim=0)
+            self.singular_values = None
 
         self.init_parameters(use_random_init=use_random_init)
         self.num_subspace_params = len(self.parameters_vec)
@@ -94,12 +104,19 @@ class LinearSubspace(nn.Module):
     def load_ortho_basis(self, 
         ortho_basis_path: str, 
         ):
+        
+        path = os.path.join(    get_original_cwd(), ortho_basis_path    )
+        if ortho_basis_path.endswith('.pt'): 
+            self.ortho_basis = torch.load(
+                    path, map_location='cpu')['ortho_basis']
+            self.singular_values = torch.load(
+                    path, map_location='cpu')['singular_values']
+        elif ortho_basis_path.endswith('.npz'):
+            self.ortho_basis = torch.from_numpy(np.load(path)['ortho_basis'].astype(np.float32))
+            self.singular_values = torch.from_numpy(np.load(path)['singular_values'].astype(np.float32))
+        else: 
+            raise NotImplementedError
 
-        path = os.path.join(get_original_cwd(), 
-            ortho_basis_path if ortho_basis_path.endswith('.pt') \
-                else ortho_basis_path + '.pt')
-        self.ortho_basis = torch.load(path, map_location='cpu')['ortho_basis']
-        self.singular_values = torch.load(path, map_location='cpu')['singular_values']
 
     def extract_ortho_basis_subspace(self,
         subspace_dim: Optional[int] = None,

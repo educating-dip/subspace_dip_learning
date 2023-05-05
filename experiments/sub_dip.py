@@ -3,6 +3,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import hydra
 import torch
+import numpy as np
 
 from torch.utils.data import DataLoader
 
@@ -70,6 +71,8 @@ def coordinator(cfg : DictConfig) -> None:
         num_random_projs=cfg.subspace.num_random_projs,
         load_ortho_basis_path=cfg.subspace.ortho_basis_path,
         params_space_retain_ftc=cfg.subspace.params_space_retain_ftc,
+        use_random_basis=cfg.subspace.use_random_basis,
+        num_net_params=sum([np.prod(p.size()) for p in base_reconstructor.nn_model.parameters()]),
         device=device
     )
 
