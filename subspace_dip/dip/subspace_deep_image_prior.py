@@ -53,7 +53,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             self.nn_model.load_state_dict(
                 state_dict=state_dict
             )
-        if any(True for _ in self.nn_model.buffers()):
+        if len(list(self.nn_model.buffers())) != 0:
             self.func_model_with_input, _ , self.buffers = ftch.make_functional_with_buffers(self.nn_model)
         else:
             self.func_model_with_input, _ = ftch.make_functional(self.nn_model)

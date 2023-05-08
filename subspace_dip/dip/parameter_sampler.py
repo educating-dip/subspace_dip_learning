@@ -1,7 +1,7 @@
 """
 Provides :class:`ParameterSampler`.
 """
-from typing import Dict, Optional, Any, Union
+from typing import Dict, Optional, Any, Union, List
 
 import os
 import socket
@@ -344,14 +344,17 @@ class ParameterSampler:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(self.parameters_samples, path)
 
-    def load_sampled_paramters(self, 
-        path_to_parameters_samples: str, 
+    def load_sampled_paramters(self,
+        path_to_parameters_samples: Union[str, List[str]],
         device: Optional[Any] = None
         ):
-        
-        path = os.path.join(get_original_cwd(), 
-            path_to_parameters_samples if path_to_parameters_samples.endswith('.pt') \
-                else path_to_parameters_samples + '.pt')
-        self.parameters_samples.extend(
-            torch.load(path, map_location=device)
-        )
+
+        if isinstance(path_to_parameters_samples, str): 
+            path_to_parameters_samples = [path_to_parameters_samples]
+    
+        for path in path_to_parameters_samples: 
+            path = os.path.join(get_original_cwd(), path if path.endswith('.pt') \
+                    else path_to_parameters_samples + '.pt')
+            self.parameters_samples.extend(
+                torch.load(path, map_location=device)
+            )
