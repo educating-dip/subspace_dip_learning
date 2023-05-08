@@ -53,12 +53,15 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             self.nn_model.load_state_dict(
                 state_dict=state_dict
             )
-        self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
+        if any(True for _ in self.nn_model.buffers()):
+            self.func_model_with_input, _ , self.buffers = ftch.make_functional_with_buffers(self.nn_model)
+        else:
+            self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
         self.pretrained_weights = torch.cat(
             [param.flatten().detach() for param in self.nn_model.parameters()]
         )
 
-    def get_func_params(self, 
+    def get_func_params(self,
             parameters_vec: Optional[Tensor] = None,
             slicing_sequence: Optional[Sequence] = None, 
         ) -> Tuple[Tensor]:
@@ -99,14 +102,26 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             apply_forward_op: bool = True
         ) -> Tensor:
 
-        out = self.func_model_with_input(
+        if hasattr(self, 'buffers'): 
+            out = self.func_model_with_input(
                 # θ = γ(c) = θ_p + \sum_i c_i * u_i, parameters_vec = c_i
                 self.get_func_params( 
-                    parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
-                    slicing_sequence=slicing_sequence
-                        ), 
+                parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
+                slicing_sequence=slicing_sequence
+                    ),
+                self.buffers,
                 self.net_input if input is None else input
-            )
+                )
+        else:
+            out = self.func_model_with_input(
+                # θ = γ(c) = θ_p + \sum_i c_i * u_i, parameters_vec = c_i
+                self.get_func_params( 
+                parameters_vec=self.subspace.parameters_vec if parameters_vec is None else parameters_vec,
+                slicing_sequence=slicing_sequence
+                    ),
+                self.net_input if input is None else input
+                )
+
         return out if not apply_forward_op else self.ray_trafo(out)
 
     def objective(self,
@@ -230,9 +245,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                self.nn_model(self.net_input)[0, ...].detach().cpu().numpy()), 0)
         
         print('Pre-trained UNET reconstruction of sample')
-        print('PSNR:', PSNR(self.nn_model(self.net_input)[0, :].detach().cpu().numpy(), ground_truth[0, :].cpu().numpy()))
+        print('PSNR:', PSNR(self.nn_model(self.net_input).detach().cpu().numpy(), ground_truth.cpu().numpy()))
         if self.net_input.shape[1] == 1:
-            print('SSIM:', SSIM(self.nn_model(self.net_input)[0, 0].detach().cpu().numpy(), ground_truth[0, 0].cpu().numpy()))
+            print('SSIM:', SSIM(self.nn_model(self.net_input).detach().cpu().numpy(), ground_truth.cpu().numpy()))
         if optim_kwargs['early_stop']['use_early_stop']: 
             earlystop = EarlyStop(size=optim_kwargs['early_stop']['buffer_size'], patience=optim_kwargs['early_stop']['patience'])
             min_loss_output_psnr_histories = []
@@ -338,7 +353,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                             min_loss_state['output'][0, ...]).cpu().numpy(), i)
 
                 if optim_kwargs['early_stop']['use_early_stop']:
-                    #variance history
+                    # variance-history-tracker 
                     flat_out = output.detach().cpu().reshape(-1).numpy()
                     earlystop.update_img_collection(flat_out)
                     img_collection = earlystop.get_img_collection()
