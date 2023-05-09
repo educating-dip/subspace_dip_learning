@@ -39,21 +39,26 @@ class LinearSubspace(nn.Module):
         )
         self.is_trimmed = False
         if not use_random_basis:
-            if parameters_samples_list is not None: 
+            if parameters_samples_list is not None:
                 self.parameters_samples_list = parameters_samples_list
                 self.ortho_basis, self.singular_values = self.extract_ortho_basis_subspace(
                     subspace_dim=subspace_dim,
                     num_random_projs=num_random_projs,
-                    use_approx=use_approx, 
+                    use_approx=use_approx
                     )
-            else: 
+                """
+                If extracted, it is unlikely that ``ortho_basis'' can be pushed to GPU. Note that
+                ``ortho_basis'' and ``singular_values'' will be on CPU. Push to ``device''
+                at a second stage after extraction.
+                """
+            else:
                 self.load_ortho_basis(ortho_basis_path=load_ortho_basis_path)
                 self.params_space_retain_ftc = params_space_retain_ftc
                 if self.params_space_retain_ftc is not None:
                     self.is_trimmed = True
                     self._trimming_params_in_subspace()
-            self.ortho_basis = self.ortho_basis.to(self.device)
-            self.singular_values = self.singular_values.to(self.device)
+                self.ortho_basis = self.ortho_basis.to(self.device)
+                self.singular_values = self.singular_values.to(self.device)
         else:
             assert params_space_retain_ftc is None and num_net_params is not None
             self.ortho_basis = torch.randn(
