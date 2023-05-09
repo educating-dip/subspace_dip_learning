@@ -48,7 +48,7 @@ class LinearSubspace(nn.Module):
                     )
                 """
                 If extracted, it is unlikely that ``ortho_basis'' can be pushed to GPU. Note that
-                ``ortho_basis'' and ``singular_values'' will be on CPU. Push to ``device''
+                ``ortho_basis'' and ``singular_values'' are be on CPU. Push to ``device''
                 at a second stage after extraction.
                 """
             else:
