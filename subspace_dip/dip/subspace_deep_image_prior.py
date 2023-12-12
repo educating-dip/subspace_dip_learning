@@ -18,6 +18,7 @@ from torch.nn import MSELoss
 from copy import deepcopy
 from tqdm import tqdm
 from functools import partial
+from functorch.experimental import replace_all_batch_norm_modules_
 
 from .base_dip_image_prior import BaseDeepImagePrior
 from .linear_subspace import LinearSubspace
@@ -54,7 +55,9 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
                 state_dict=state_dict
             )
         if len(list(self.nn_model.buffers())) != 0:
-            self.func_model_with_input, _ , self.buffers = ftch.make_functional_with_buffers(self.nn_model)
+            self.func_model_with_input, _ , self.buffers = ftch.make_functional_with_buffers(
+                    replace_all_batch_norm_modules_(self.nn_model) # https://pytorch.org/functorch/stable/batch_norm.html
+                )
         else:
             self.func_model_with_input, _ = ftch.make_functional(self.nn_model)
         self.pretrained_weights = torch.cat(

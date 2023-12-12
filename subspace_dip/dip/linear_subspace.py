@@ -10,6 +10,7 @@ import torch.nn as nn
 import tensorly as tl
 tl.set_backend('numpy')
 import numpy as np 
+import warnings
 
 from math import ceil
 from subspace_dip.utils import get_original_cwd
@@ -57,6 +58,13 @@ class LinearSubspace(nn.Module):
                 if self.params_space_retain_ftc is not None:
                     self.is_trimmed = True
                     self._trimming_params_in_subspace()
+                
+                if self.ortho_basis.shape[-1] != subspace_dim: 
+                    warnings.warn(
+                        f"Warning loaded ``ortho_basis'' rank missmatch loaded: {self.ortho_basis.shape[-1]} only retaining first {subspace_dim}")
+                    self.ortho_basis = self.ortho_basis[:, :subspace_dim]
+                    self.singular_values = self.singular_values[:subspace_dim]
+
                 self.ortho_basis = self.ortho_basis.to(self.device)
                 self.singular_values = self.singular_values.to(self.device)
         else:

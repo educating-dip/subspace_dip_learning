@@ -303,7 +303,7 @@ def get_standard_training_dataset(
 
 def find_log_files(log_dir: str) -> str:
     log_files = []
-    for path, _, files in os.walk(log_dir):
+    for path, files in os.listdir(log_dir):
         for file in files:
             if file.startswith('events.out.tfevents.'):
                 log_files.append(os.path.join(path, file))
