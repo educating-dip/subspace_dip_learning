@@ -105,7 +105,7 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
             apply_forward_op: bool = True
         ) -> Tensor:
 
-        if hasattr(self, 'buffers'): 
+        if len(list(self.nn_model.buffers())) != 0: 
             out = self.func_model_with_input(
                 # θ = γ(c) = θ_p + \sum_i c_i * u_i, parameters_vec = c_i
                 self.get_func_params( 
@@ -250,7 +250,11 @@ class SubspaceDeepImagePrior(BaseDeepImagePrior, nn.Module):
         print('Pre-trained UNET reconstruction of sample')
         print('PSNR:', PSNR(self.nn_model(self.net_input).detach().cpu().numpy(), ground_truth.cpu().numpy()))
         if self.net_input.shape[1] == 1:
-            print('SSIM:', SSIM(self.nn_model(self.net_input).detach().cpu().numpy(), ground_truth.cpu().numpy()))
+            print('SSIM:', SSIM(
+                self.nn_model(self.net_input).detach().cpu().numpy()[0,0], 
+                ground_truth.cpu().numpy()[0,0]
+                )
+                )
         if optim_kwargs['early_stop']['use_early_stop']: 
             earlystop = EarlyStop(size=optim_kwargs['early_stop']['buffer_size'], patience=optim_kwargs['early_stop']['patience'])
             min_loss_output_psnr_histories = []
